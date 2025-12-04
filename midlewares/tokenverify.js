@@ -3,7 +3,7 @@ const jwt = require('jsonwebtoken');
 const verifyStudentToken = (req ,res ,next) => {
     try {
         const token = req.headers.authorization?.split(' ')[1];
-
+        console.log("Student Token from header:", token);
         if(!token){
         return res.status(401).json({
         success: false,
@@ -12,6 +12,7 @@ const verifyStudentToken = (req ,res ,next) => {
         }
 
         const decoded = jwt.verify(token, process.env.JWT_SECRET || 'your_secret_key_here')
+        console.log("Student Decoded token:", decoded);
         req.user = decoded;
         next();
     } catch (error) {
@@ -20,6 +21,17 @@ const verifyStudentToken = (req ,res ,next) => {
             message: 'Token không hợp lệ hoặc đã hết hạn',
             error: error.message
         });
+    }
+}
+const wssStudentToken = (token) => {
+    try {
+        if(!token){
+            throw new Error('Token không được cung cấp');
+        }
+        const decoded = jwt.verify(token, process.env.JWT_SECRET || 'your_secret_key_here');
+        return decoded;
+    } catch (error) {
+        throw new Error('Token không hợp lệ hoặc đã hết hạn: ' + error.message);
     }
 }
 const verifyTeacherToken = (req, res, next) => {
@@ -55,4 +67,4 @@ const verifyTeacherToken = (req, res, next) => {
     }
 }
 
-module.exports = { verifyStudentToken,verifyTeacherToken}
+module.exports = { verifyStudentToken,verifyTeacherToken,wssStudentToken}

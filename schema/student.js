@@ -6,7 +6,7 @@ const studentSchema = new Schema ({
     classid: {type: mongoose.Schema.Types.ObjectId, ref: 'Class', required: true},
     DOB: {type: String, required: true},  
     avatar: {type: String}, 
-    email: {type: String , required: true},
+    email: {type: String ,unique: true, required: true},
     password: {type: String , required: true},
     parentContact: {type: String, required: true},
     academic_performance: {

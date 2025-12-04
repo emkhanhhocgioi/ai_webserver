@@ -7,7 +7,7 @@ const SubjectClass = require('../schema/subject_teacher');
 const Student = require('../schema/student');
 const Test = require('../schema/test_schema');
 const Question = require('../schema/test_question');
-
+const TestAnswer = require('../schema/test_answer');
 // Controller functions
 const register = async (req, res) => {
   try {
@@ -225,12 +225,23 @@ const getClassTest = async (req, res) => {
     const { classId } = req.params;
 
     const tests = await Test.find({ classID: classId });
+    const submitCounts = await TestAnswer.aggregate([
+      { $match: { testID: { $in: tests.map(test => test._id) }, submit: true } },
+      { $group: { _id: "$testID", count: { $sum: 1 } } }
+    ]);
+    const mergedResults = tests.map(test => {
+      const submitCount = submitCounts.find(sc => sc._id.toString() === test._id.toString());
+      return {
+        ...test.toObject(),
+        submittedCount: submitCount ? submitCount.count : 0
+      };
+    });
 
     if (!tests || tests.length === 0) {
       return res.status(404).json({ message: 'Không tìm thấy bài kiểm tra cho lớp này' });
     }
     
-    res.status(200).json({ tests });
+    res.status(200).json({  tests: mergedResults });
   } catch (error) {
     res.status(500).json({ message: 'Đã xảy ra lỗi trong bài kiểm tra giáo viên' });
     console.error('Lỗi trong bài kiểm tra giáo viên:', error);
@@ -239,7 +250,7 @@ const getClassTest = async (req, res) => {
 const CreateTest = async (req, res) => {
   try {
     const teacherID = req.user.userId;
-    const { classID, testtitle, subject, participants, closeDate } = req.body;
+    const { classID, testtitle, subject, participants,test_time, closeDate } = req.body;
     console.log("Creating test with data:", req.body);  
     const newTest = new Test({
       classID,
@@ -247,6 +258,7 @@ const CreateTest = async (req, res) => {
       testtitle,
       subject,
       participants,
+      test_time,
       closeDate: closeDate,
     });
     await newTest.save();
@@ -254,6 +266,36 @@ const CreateTest = async (req, res) => {
   } catch (error) {
     res.status(500).json({ message: 'Đã xảy ra lỗi khi tạo bài kiểm tra' });
     console.error('Lỗi khi tạo bài kiểm tra:', error);
+  }
+};
+const EditTestById = async (req, res) => {
+  try {
+    const { testId } = req.params;
+    const updateData = req.body;  
+    const updatedTest = await Test.findByIdAndUpdate(testId, updateData, { new: true });
+    if (!updatedTest) {
+      return res.status(404).json({ message: 'Bài kiểm tra không tồn tại' });
+    }
+    res.status(200).json({  
+      message: 'Bài kiểm tra đã được cập nhật thành công',
+      test: updatedTest
+    });
+  } catch (error) {
+    res.status(500).json({ message: 'Đã xảy ra lỗi khi cập nhật bài kiểm tra' });
+    console.error('Lỗi khi cập nhật bài kiểm tra:', error);
+  }
+};
+const DeleteTestById = async (req, res) => {
+  try {
+    const { testId } = req.params;
+    const deletedTest = await Test.findByIdAndDelete(testId);
+    if (!deletedTest) {
+      return res.status(404).json({ message: 'Bài kiểm tra không tồn tại' });
+    }
+    res.status(200).json({ message: 'Bài kiểm tra đã được xóa thành công' });
+  } catch (error) { 
+    res.status(500).json({ message: 'Đã xảy ra lỗi khi xóa bài kiểm tra' });
+    console.error('Lỗi khi xóa bài kiểm tra:', error);
   }
 };
 const GetTestDetailById = async (req, res) => {
@@ -275,6 +317,20 @@ const GetTestDetailById = async (req, res) => {
   } catch (error) {
     res.status(500).json({ message: 'Đã xảy ra lỗi khi lấy chi tiết bài kiểm tra' });
     console.error('Lỗi khi lấy chi tiết bài kiểm tra:', error);
+  }
+};
+
+// Teacher Answer
+
+const getSubmittedAnswers = async (req, res) => {
+  try {
+    const { testId } = req.params;  
+    const submittedAnswers = await TestAnswer.find({ testID: testId, submit: true }).populate('studentID').populate('testID')
+    .populate('answers.questionID', 'question'); 
+    res.status(200).json({ submittedAnswers });
+  } catch (error) {
+    res.status(500).json({ message: 'Đã xảy ra lỗi khi lấy câu trả lời đã nộp' });
+    console.error('Lỗi khi lấy câu trả lời đã nộp:', error);
   }
 };
 
@@ -357,6 +413,9 @@ module.exports = {
   GetTestDetailById,
   CreateQuestion,
   DeleteQuestion,
-  UpdateQuestion
+  UpdateQuestion,
+  DeleteTestById,
+  EditTestById,
+  getSubmittedAnswers
 
 };

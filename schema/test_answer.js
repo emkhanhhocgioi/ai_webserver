@@ -5,37 +5,43 @@ const testAnswerSchema = new Schema({
     testID: {
         type: Schema.Types.ObjectId,
         ref: "Test",
-        required: true
+        required: true,
     },
-
     studentID: {
         type: Schema.Types.ObjectId,
         ref: "Student",
-        required: true
+        required: true,
+        
     },
-
-    answerUrl: {
+    answers: [
+        {
+            questionID: {
+                type: Schema.Types.ObjectId,
+                ref: "Question",
+        
+            },
+            answer: {
+                type: String,
+          
+            },
+            isCorrect: {
+                type: Boolean,
+                default: false 
+            }
+        },
+       
+    ],
+    teacherComments: {  
         type: String,
-        required: true
+        default: ''
     },
-
     submissionTime: {
         type: Date,
-        required: true,
         default: Date.now
     },
-
-    status: {
-        type: String,
-        enum: ['Chưa nộp', 'Đã nộp', 'Chậm nộp'],
-        default: 'Chưa nộp'
-    },
-
-    diem: {
-        type: Number,
-        min: 0,
-        max: 10,
-        default: 0
+    submit:{
+        type: Boolean,
+        default: false
     }
 }, { timestamps: true });
 
