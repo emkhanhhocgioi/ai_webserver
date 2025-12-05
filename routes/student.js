@@ -6,6 +6,8 @@ const studentController = require('../controller/student_controller');
 
 router.get('/tests', verifyStudentToken, studentController.getStudentClassTest);
 router.get('/test/:testId', verifyStudentToken, studentController.GetTestDetailById);
+router.get('/test/grading/:testId',verifyStudentToken, studentController.GetTestGradingById);  
+
 
 
 module.exports = router;

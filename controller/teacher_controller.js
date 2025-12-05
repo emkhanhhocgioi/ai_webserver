@@ -8,6 +8,7 @@ const Student = require('../schema/student');
 const Test = require('../schema/test_schema');
 const Question = require('../schema/test_question');
 const TestAnswer = require('../schema/test_answer');
+const { uploadToCloudinary,deleteImageFromCloudinary } = require('../midlewares/upload');
 // Controller functions
 const register = async (req, res) => {
   try {
@@ -319,6 +320,39 @@ const GetTestDetailById = async (req, res) => {
     console.error('Lỗi khi lấy chi tiết bài kiểm tra:', error);
   }
 };
+const TeacherGradingAsnwer = async (req, res) => {
+  try {
+    const { answerId } = req.params;
+    const { teacherGrade, teacherComments, answerData } = req.body;
+    console.log("Grading answer with data:", req.body);
+    console.log("Answer ID:", answerId);
+    console.log("Answer Data received:", JSON.stringify(answerData, null, 2));
+    
+    const updatedAnswer = await TestAnswer.findByIdAndUpdate(
+      answerId,
+      { 
+        teacherGrade, 
+        teacherComments,
+        answers: answerData
+      },
+      { new: true }
+    );
+    
+    if (!updatedAnswer) {
+      return res.status(404).json({ message: 'Câu trả lời không tồn tại' });
+    }
+    
+    console.log("Updated answer:", updatedAnswer);
+    
+    res.status(200).json({
+      message: 'Câu trả lời đã được chấm điểm thành công',
+      answer: updatedAnswer
+    });
+  } catch (error) {
+    res.status(500).json({ message: 'Đã xảy ra lỗi khi chấm điểm câu trả lời' });
+    console.error('Lỗi khi chấm điểm câu trả lời:', error);
+  }
+};
 
 // Teacher Answer
 
@@ -339,12 +373,39 @@ const getSubmittedAnswers = async (req, res) => {
 const CreateQuestion = async (req, res) => {
   try {
     const { testId } = req.params;
-    const { difficult, question, questionType, grade, solution, metadata, options } = req.body;
+    const { difficult, question, questionType, grade, solution } = req.body;
+    let { metadata, options } = req.body;
+
+    // Parse options if it's a JSON string
+    if (typeof options === 'string') {
+      try {
+        options = JSON.parse(options);
+      } catch (e) {
+        options = [];
+      }
+    }
 
     // Kiểm tra xem bài test có tồn tại không
     const test = await Test.findById(testId);
     if (!test) {
       return res.status(404).json({ message: 'Bài kiểm tra không tồn tại' });
+    }
+
+    // Xử lý upload file nếu có
+    if (req.file) {
+      try {
+        const imageUrl = await uploadToCloudinary(
+          req.file.buffer, 
+          req.file.originalname,
+          'questionImages'
+        );
+        metadata = imageUrl;
+      } catch (uploadError) {
+        console.error('Lỗi upload ảnh:', uploadError);
+        return res.status(500).json({ message: 'Lỗi khi upload ảnh câu hỏi' });
+      }
+    } else {
+      metadata = null;
     }
 
     // Tạo câu hỏi mới
@@ -388,7 +449,62 @@ const DeleteQuestion = async (req, res) => {
 const UpdateQuestion = async (req, res) => {
   try {
     const { questionId } = req.params;
-    const updateData = req.body;  
+    const updateData = { ...req.body };
+    
+    // Parse options if it's a JSON string
+    if (typeof updateData.options === 'string') {
+      try {
+        updateData.options = JSON.parse(updateData.options);
+      } catch (e) {
+        updateData.options = [];
+      }
+    }
+    const isExistingQuestion = await Question.findById(questionId);
+    if (!isExistingQuestion) {
+      return res.status(404).json({ message: 'Câu hỏi không tồn tại' });
+    }
+    
+    // Xử lý upload file mới nếu có
+    if (req.file) {
+      // Xóa ảnh cũ nếu tồn tại
+      if (isExistingQuestion.metadata) {
+        try {
+          await deleteImageFromCloudinary(isExistingQuestion.metadata);
+          console.log('Old image deleted successfully from Cloudinary');
+        } catch (deleteError) {
+          console.error('Lỗi khi xóa ảnh cũ:', deleteError);
+          // Tiếp tục upload ảnh mới ngay cả khi xóa ảnh cũ thất bại
+        }
+      }
+      
+      // Upload ảnh mới
+      try {
+        const imageUrl = await uploadToCloudinary(
+          req.file.buffer, 
+          req.file.originalname,
+          'questionImages'
+        );
+        updateData.metadata = imageUrl;
+      } catch (uploadError) {
+        console.error('Lỗi upload ảnh:', uploadError);
+        return res.status(500).json({ message: 'Lỗi khi upload ảnh câu hỏi' });
+      }
+    } else if (updateData.metadata === undefined) {
+      // Nếu không có file mới và metadata không được gửi trong body, giữ nguyên metadata cũ
+      // Không làm gì
+    } else if (updateData.metadata === '' || updateData.metadata === 'null') {
+      // Nếu muốn xóa metadata
+      if (isExistingQuestion.metadata) {
+        try {
+          await deleteImageFromCloudinary(isExistingQuestion.metadata);
+          console.log('Image deleted from Cloudinary');
+        } catch (deleteError) {
+          console.error('Lỗi khi xóa ảnh:', deleteError);
+        }
+      }
+      updateData.metadata = null;
+    }
+    
     const updatedQuestion = await Question.findByIdAndUpdate(questionId, updateData, { new: true });
     if (!updatedQuestion) {
       return res.status(404).json({ message: 'Câu hỏi không tồn tại' });
@@ -416,6 +532,7 @@ module.exports = {
   UpdateQuestion,
   DeleteTestById,
   EditTestById,
-  getSubmittedAnswers
+  getSubmittedAnswers,
+  TeacherGradingAsnwer
 
 };

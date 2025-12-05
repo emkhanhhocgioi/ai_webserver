@@ -174,6 +174,27 @@ const GetTestDetailById = async (req, res) => {
     console.error('Lỗi khi lấy chi tiết bài kiểm tra:', error);
   }
 };
+const GetTestGradingById = async (req, res) => {
+  try {
+    const { testId } = req.params;
+    const test = await TestScheme.findById(testId);
+    const studentid = req.user.userId;
+    if (!test) {
+      return res.status(404).json({ message: 'Bài kiểm tra không tồn tại' });
+    }   
+    // Lấy tất cả câu hỏi của bài kiểm tra
+    const questions = await Question.find({ testid: testId }).select('-solution');
+    const answer = await TestAnswer.findOne({ testID: testId, studentID: studentid });
+    res.status(200).json({ 
+      test,
+      questions,
+      answer
+    });
+  } catch (error) {
+    res.status(500).json({ message: 'Đã xảy ra lỗi khi lấy chi tiết bài kiểm tra' });
+    console.error('Lỗi khi lấy chi tiết bài kiểm tra:', error);
+  }
+};
 
 
 // Function lấy tất cả thông tin học sinh (không bao gồm password)
@@ -197,5 +218,6 @@ module.exports = {
     loginStudent,
     getAllStudents,
     getStudentClassTest,
-    GetTestDetailById
+    GetTestDetailById,
+    GetTestGradingById
 };

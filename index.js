@@ -1,6 +1,6 @@
 const express = require('express')
 const cors = require('cors')
-const dotenv = require('dotenv');
+
 const http = require('http');
 const mongoose = require('./dtb/shared_database')
 const class_service = require('./routes/classservice')
@@ -10,8 +10,9 @@ const student_routes = require('./routes/student')
 const teacher_routes = require('./routes/teacher')
 const admin_routes = require('./routes/admin')
 const WebSocketService = require('./service/websocket');
+const {cloudinary} = require('./utils/cloudiary-utils');
 const app = express();
-dotenv.config();
+require('dotenv').config();
 
 app.use(cors());
 app.use(express.json());
@@ -52,4 +53,9 @@ const PORT = process.env.PORT || 4000;
 server.listen(PORT, () => {
     console.log(`API gateway is running on port ${PORT}`);
     console.log(`WebSocket service is ready`);
+    console.log(`Cloudinary Config:`, {
+      cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
+      api_key: process.env.CLOUDINARY_API_KEY,
+      api_secret: process.env.CLOUDINARY_API_SECRET
+    });
 });

@@ -14,11 +14,9 @@ const studentSchema = new Schema ({
     enum: ['Tốt', 'Khá', 'Trung bình', 'Yếu'],
     default: 'Tốt'
     },
-    conduct: {
+   test_Accuracy: {
     type: String,
-    enum: ['Tốt', 'Khá', 'Trung bình', 'Yếu'],
-    default: 'Tốt'
-    },
+   },
    averageScore: {
     type: Number,
     default: 0

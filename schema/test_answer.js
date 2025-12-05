@@ -26,14 +26,22 @@ const testAnswerSchema = new Schema({
             },
             isCorrect: {
                 type: Boolean,
-                default: false 
-            }
+                default: false
+            },
         },
        
     ],
     teacherComments: {  
         type: String,
         default: ''
+    },
+    teacherGrade:{
+        type: Number,
+        default: 0
+    },
+    AIGrade:{
+        type: Number,
+        default: 0
     },
     submissionTime: {
         type: Date,
