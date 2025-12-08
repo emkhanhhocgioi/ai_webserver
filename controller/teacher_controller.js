@@ -8,6 +8,7 @@ const Student = require('../schema/student');
 const Test = require('../schema/test_schema');
 const Question = require('../schema/test_question');
 const TestAnswer = require('../schema/test_answer');
+const Lesson = require('../schema/class_lesson');
 const { uploadToCloudinary,deleteImageFromCloudinary } = require('../midlewares/upload');
 // Controller functions
 const register = async (req, res) => {
@@ -432,6 +433,59 @@ const CreateQuestion = async (req, res) => {
     console.error('Lỗi khi tạo câu hỏi:', error);
   }
 };
+const CreateQuestions = async (req, res) => {
+  try {
+    const { testId } = req.params;
+    const questionsData = req.body.questions; // Mảng các câu hỏi 
+    const createdQuestions = [];
+    const files = req.files || []; // Array of uploaded files
+
+    // Kiểm tra xem bài test có tồn tại không
+    const test = await Test.findById(testId);
+    if (!test) {
+      return res.status(404).json({ message: 'Bài kiểm tra không tồn tại' });
+    }
+    
+    for (let i = 0; i < questionsData.length; i++) {
+      const questionData = questionsData[i];
+      const { difficult, question, questionType, grade, solution, options } = questionData;
+      let metadata = questionData.metadata;
+      
+      // Check if there's a corresponding file for this question
+      const fileForQuestion = files.find(f => f.fieldname === `file_${i}`);
+      
+      if (fileForQuestion) {
+        try {
+          const uploadResult = await uploadToCloudinary(fileForQuestion.buffer, fileForQuestion.originalname);
+          metadata = uploadResult.secure_url;
+        } catch (uploadError) {
+          console.error('Lỗi khi upload ảnh:', uploadError);
+          metadata = questionData.metadata || null;
+        }
+      }
+      
+      const newQuestion = new Question({
+        testid: testId,
+        difficult,
+        question,
+        questionType,
+        grade,  
+        solution,
+        metadata,
+        options
+      });
+      await newQuestion.save();
+      createdQuestions.push(newQuestion);
+    }
+    res.status(201).json({ 
+      message: 'Các câu hỏi được tạo thành công', 
+      questions: createdQuestions 
+    });
+  } catch (error) {
+    res.status(500).json({ message: 'Đã xảy ra lỗi khi tạo các câu hỏi' });
+    console.error('Lỗi khi tạo các câu hỏi:', error);
+  }
+};
 const DeleteQuestion = async (req, res) => {
   try {
     const { questionId } = req.params;
@@ -519,6 +573,159 @@ const UpdateQuestion = async (req, res) => {
   }
 };
 
+// Lesson Management
+
+const createLesson = async (req, res) => {
+  try {
+    const { title, classId, subject } = req.body;
+    const teacherId = req.user.userId;
+    let lessonMetadata = null;
+    
+    if (req.file) {
+      try {
+        lessonMetadata = await uploadToCloudinary(
+          req.file.buffer,
+          req.file.originalname,
+          'lessonMaterials'
+        );
+      } catch (uploadError) {
+        console.error('Error uploading lesson file:', uploadError);
+        return res.status(500).json({ message: 'Error uploading lesson file' });
+      }
+    }
+    
+    const newLesson = new Lesson({
+      title,
+      classId,
+      teacherId,
+      subject,
+      lessonMetadata
+    });
+    
+    await newLesson.save();
+    res.status(201).json({ message: 'Lesson created successfully', lesson: newLesson });
+  } catch (error) {
+    res.status(500).json({ message: 'Error creating lesson' });
+    console.error('Error creating lesson:', error);
+  }
+}
+
+const getTeacherLessons = async (req, res) => {
+  try {
+    const teacherId = req.user.userId;
+    const { classId } = req.query; // Get classId from query params
+    
+    // Build query object
+    const query = { teacherId };
+    if (classId) {
+      query.classId = classId;
+    }
+    
+    const lessons = await Lesson.find(query);
+    
+    if (!lessons || lessons.length === 0) {
+      return res.status(200).json({ message: 'No lessons found for this teacher', lessons: [] });
+    }
+    
+    res.status(200).json({ lessons });
+  } catch (error) {
+    res.status(500).json({ message: 'Error fetching lessons' });
+    console.error('Error fetching lessons:', error);
+  }
+};
+
+const TeacherGetLessonsById= async (req, res) => {
+  try {
+    const { lessonId } = req.params;
+    const lesson = await Lesson.findById(lessonId).populate('classId').populate('teacherId', 'name');
+
+    if (!lesson) {
+      return res.status(404).json({ message: 'Lesson not found' });
+    } 
+    res.status(200).json({ lesson });
+  }
+  catch (error) {
+    res.status(500).json({ message: 'Error fetching lesson details' });
+    console.error('Error fetching lesson details:', error);
+  }
+};
+
+const DeleteLessonById = async (req, res) => {
+  try {
+    const { lessonId } = req.params;
+    const deletedLesson = await Lesson.findByIdAndDelete(lessonId);
+    if (!deletedLesson) { 
+      return res.status(404).json({ message: 'Lesson not found' }); 
+    }
+    res.status(200).json({ message: 'Lesson deleted successfully' });
+  } catch (error) {
+    res.status(500).json({ message: 'Error deleting lesson' });
+    console.error('Error deleting lesson:', error);
+  }
+};
+const UpdateLesson = async (req, res) => {
+  try {
+    const { lessonId } = req.params;
+    const { title, classId, teacherId, subject } = req.body;
+    
+    const isExistingLesson = await Lesson.findById(lessonId);
+    if (!isExistingLesson) {
+      return res.status(404).json({ message: 'Lesson not found' });
+    }
+    
+    // Prepare update data
+    const updateData = {
+      title,
+      classId,
+      teacherId,
+      subject
+    };
+    
+    // Handle new file upload if exists
+    if (req.file) {
+      // Delete old file if exists    
+      if (isExistingLesson.lessonMetadata) {
+        try {
+          await deleteImageFromCloudinary(isExistingLesson.lessonMetadata); 
+          console.log('Old lesson file deleted successfully from Cloudinary');
+        } catch (deleteError) {
+          console.error('Error deleting old lesson file:', deleteError);
+        }
+      } 
+      // Upload new file
+      try {
+        const fileUrl = await uploadToCloudinary(
+          req.file.buffer, 
+          req.file.originalname,
+          'lessonMaterials'
+        );
+        updateData.lessonMetadata = fileUrl;
+      }
+      catch (uploadError) {
+        console.error('Error uploading lesson file:', uploadError); 
+        return res.status(500).json({ message: 'Error uploading lesson file' });
+      } 
+    }
+    // If no new file uploaded, keep the existing metadata
+    // Don't delete or modify lessonMetadata unless explicitly uploading a new file
+    const updatedLesson = await Lesson.findByIdAndUpdate(lessonId, updateData, { new: true });
+    if (!updatedLesson) {
+      return res.status(404).json({ message: 'Lesson not found' });
+    } 
+    res.status(200).json({
+      success: true,
+      message: 'Lesson updated successfully',
+      lesson: updatedLesson
+    });
+  }
+  catch (error) {
+    res.status(500).json({ message: 'Error updating lesson' });
+    console.error('Error updating lesson:', error);
+  }
+};
+
+
+
 module.exports = {
   register,
   login,
@@ -533,6 +740,12 @@ module.exports = {
   DeleteTestById,
   EditTestById,
   getSubmittedAnswers,
-  TeacherGradingAsnwer
+  TeacherGradingAsnwer,
+  CreateQuestions,
+  createLesson,
+  getTeacherLessons ,
+  DeleteLessonById,
+  UpdateLesson,
+  TeacherGetLessonsById
 
 };

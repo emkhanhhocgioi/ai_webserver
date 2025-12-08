@@ -7,6 +7,7 @@ const Teacher = require('../schema/teacher')
 const ClassStudent = require('../schema/class_student')
 const Question = require('../schema/test_question')
 const TestAnswer = require('../schema/test_answer')
+const Lesson = require('../schema/class_lesson')
 const answerController = require('./answer_controller');
 // Function đăng ký tài khoản học sinh
 const registerStudent = async (req, res) => {
@@ -213,11 +214,32 @@ const getAllStudents = async (req, res) => {
     }
 };
 
+const getStudentLessons = async (req, res) => {
+    try {
+        const studentId = req.user.userId;
+        // Find the class ID for the student
+        const classStudent = await ClassStudent.findOne({ studentID: studentId });
+        if (!classStudent) {
+            return res.status(404).json({ message: 'Lớp học sinh không tìm thấy' });
+        }
+        const classId = classStudent.classID;
+
+        // Find lessons for the class
+        const lessons = await Lesson.find({ classId });
+        res.status(200).json({ lessons });
+    } catch (error) {
+        res.status(500).json({ message: 'Error fetching lessons' });
+        console.error('Error fetching lessons:', error);
+    }
+};
+
+
 module.exports = {
     registerStudent,
     loginStudent,
     getAllStudents,
     getStudentClassTest,
     GetTestDetailById,
-    GetTestGradingById
+    GetTestGradingById,
+    getStudentLessons
 };

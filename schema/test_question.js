@@ -14,7 +14,7 @@ const TestQuestion = new Schema({
     questionType:{type: String, required: true},
     grade: {type: Number , required: true},
     solution: { type: String, required: true }, 
-    metadata: {type: String, required: true},
+    metadata: {type: String, default: ''},
     options: {type: Array , required: true}
 })
 

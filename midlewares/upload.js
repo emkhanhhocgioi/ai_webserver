@@ -26,18 +26,24 @@ const upload = multer({
 });
 
 // Hàm upload file lên Cloudinary
-const uploadToCloudinary = async (buffer, originalName, folder = 'schoolManagement') => {
+const uploadToCloudinary = async (buffer, originalName, folder = 'schoolManagement', resourceType = 'auto') => {
     try {
         return new Promise((resolve, reject) => {
+            const uploadOptions = {
+                resource_type: resourceType,
+                folder: folder,
+                public_id: `${Date.now()}_${path.parse(originalName).name}`,
+            };
+
+            // Only add transformation for images
+            if (resourceType === 'image') {
+                uploadOptions.transformation = [
+                    { width: 800, height: 600, crop: 'fill', quality: 'auto' }
+                ];
+            }
+
             const uploadStream = cloudinary.uploader.upload_stream(
-                {
-                    resource_type: 'image',
-                    folder: folder,
-                    public_id: `${Date.now()}_${path.parse(originalName).name}`,
-                    transformation: [
-                        { width: 800, height: 600, crop: 'fill', quality: 'auto' }
-                    ]
-                },
+                uploadOptions,
                 (error, result) => {
                     if (error) {
                         reject(error);
