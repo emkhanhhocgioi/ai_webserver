@@ -10,6 +10,7 @@ const Question = require('../schema/test_question');
 const TestAnswer = require('../schema/test_answer');
 const Lesson = require('../schema/class_lesson');
 const { uploadToCloudinary,deleteImageFromCloudinary } = require('../midlewares/upload');
+const { CreateTestNotification } = require('./notifications_controller');
 // Controller functions
 const register = async (req, res) => {
   try {
@@ -151,24 +152,47 @@ const TeacherGetSubjectClass = async (req, res) => {
     const teacherId = req.user.userId;
     console.log("Fetching classes for teacher ID:", teacherId);
     
-    const classDocs = await SubjectClass.find({ 
+    let classDocs = await SubjectClass.find({ 
       $or: [
-        { toan: teacherId },
-        { ngu_van: teacherId },
-        { tieng_anh: teacherId },
-        { vat_ly: teacherId },
-        { hoa_hoc: teacherId },
-        { sinh_hoc: teacherId },
-        { lich_su: teacherId },
-        { dia_ly: teacherId },
-        { giao_duc_cong_dan: teacherId },
-        { cong_nghe: teacherId },
-        { tin_hoc: teacherId },
-        { the_duc: teacherId },
-        { am_nhac: teacherId },
-        { my_thuat: teacherId }
+      { toan: teacherId },
+      { ngu_van: teacherId },
+      { tieng_anh: teacherId },
+      { vat_ly: teacherId },
+      { hoa_hoc: teacherId },
+      { sinh_hoc: teacherId },
+      { lich_su: teacherId },
+      { dia_ly: teacherId },
+      { giao_duc_cong_dan: teacherId },
+      { cong_nghe: teacherId },
+      { tin_hoc: teacherId },
+      { the_duc: teacherId },
+      { am_nhac: teacherId },
+      { my_thuat: teacherId }
       ]
     }).populate('classid');
+
+    // Extract class ids (populated or raw)
+    const classIds = classDocs
+      .map(cd => cd.classid ? (cd.classid._id || cd.classid) : null)
+      .filter(Boolean);
+
+    // Aggregate student counts per classID from ClassStudent
+    const studentCounts = classIds.length
+      ? await ClassStudent.aggregate([
+        { $match: { classID: { $in: classIds } } },
+        { $group: { _id: "$classID", count: { $sum: 1 } } }
+      ])
+      : [];
+
+    // Attach studentCount to each classDoc
+    classDocs = classDocs.map(cd => {
+      const cid = cd.classid ? (cd.classid._id || cd.classid) : null;
+      const sc = studentCounts.find(s => s._id && cid && s._id.toString() === cid.toString());
+      return {
+      ...cd.toObject(),
+      studentCount: sc ? sc.count : 0
+      };
+    });
 
     if (!classDocs || classDocs.length === 0) {
       return res.status(404).json({ message: 'Không tìm thấy lớp học nào' });
@@ -205,6 +229,7 @@ const TeacherGetSubjectClass = async (req, res) => {
         classId: classDoc.classid?._id,
         class_code: classDoc.classid?.class_code,
         class_year: classDoc.classid?.class_year,
+        studentCount: classDoc.studentCount || 0,
         subjects: subjects
       };
     });
@@ -225,8 +250,13 @@ const getClassTest = async (req, res) => {
   try {
     
     const { classId } = req.params;
-
-    const tests = await Test.find({ classID: classId });
+    
+    const teacherId = req.user.userId;
+    const teacherSubject = await Teacher.findById(teacherId).select('subject');
+    if (!teacherSubject) {
+      return res.status(404).json({ message: 'Giáo viên không tồn tại' });
+    }
+    const tests = await Test.find({ classID: classId , subject: teacherSubject.subject });
     const submitCounts = await TestAnswer.aggregate([
       { $match: { testID: { $in: tests.map(test => test._id) }, submit: true } },
       { $group: { _id: "$testID", count: { $sum: 1 } } }
@@ -252,18 +282,35 @@ const getClassTest = async (req, res) => {
 const CreateTest = async (req, res) => {
   try {
     const teacherID = req.user.userId;
-    const { classID, testtitle, subject, participants,test_time, closeDate } = req.body;
+    const { classID, testtitle, subject, closeDate } = req.body;
     console.log("Creating test with data:", req.body);  
     const newTest = new Test({
       classID,
       teacherID,
       testtitle,
       subject,
-      participants,
-      test_time,
       closeDate: closeDate,
     });
     await newTest.save();
+    
+    // Tạo và gửi thông báo cho học sinh
+    try {
+      const wsService = req.app.get('wsService');
+      await CreateTestNotification(
+        teacherID,
+        classID,
+        newTest._id,
+        testtitle,
+        subject,
+        closeDate,
+        wsService
+      );
+      console.log('Test notification sent successfully');
+    } catch (notificationError) {
+      console.error('Error sending notification:', notificationError);
+      // Không throw error để không ảnh hưởng đến việc tạo test
+    }
+    
     res.status(201).json({ message: 'Bài kiểm tra được tạo thành công', test: newTest });
   } catch (error) {
     res.status(500).json({ message: 'Đã xảy ra lỗi khi tạo bài kiểm tra' });
@@ -274,6 +321,7 @@ const EditTestById = async (req, res) => {
   try {
     const { testId } = req.params;
     const updateData = req.body;  
+    console.log("Updating test ID:", testId, "with data:", updateData);
     const updatedTest = await Test.findByIdAndUpdate(testId, updateData, { new: true });
     if (!updatedTest) {
       return res.status(404).json({ message: 'Bài kiểm tra không tồn tại' });
@@ -334,7 +382,8 @@ const TeacherGradingAsnwer = async (req, res) => {
       { 
         teacherGrade, 
         teacherComments,
-        answers: answerData
+        answers: answerData,
+        isgraded: true
       },
       { new: true }
     );
@@ -360,8 +409,10 @@ const TeacherGradingAsnwer = async (req, res) => {
 const getSubmittedAnswers = async (req, res) => {
   try {
     const { testId } = req.params;  
-    const submittedAnswers = await TestAnswer.find({ testID: testId, submit: true }).populate('studentID').populate('testID')
-    .populate('answers.questionID', 'question'); 
+    const submittedAnswers = await TestAnswer.find({ testID: testId, submit: true }).populate('studentID','name avatar' ).populate('testID',
+    'subject'
+    )
+    .populate('answers.questionID', 'question questionType'); 
     res.status(200).json({ submittedAnswers });
   } catch (error) {
     res.status(500).json({ message: 'Đã xảy ra lỗi khi lấy câu trả lời đã nộp' });
@@ -374,7 +425,7 @@ const getSubmittedAnswers = async (req, res) => {
 const CreateQuestion = async (req, res) => {
   try {
     const { testId } = req.params;
-    const { difficult, question, questionType, grade, solution } = req.body;
+    const { difficult, question, questionType,subjectQuestionType, grade, solution } = req.body;
     let { metadata, options } = req.body;
 
     // Parse options if it's a JSON string
@@ -415,6 +466,7 @@ const CreateQuestion = async (req, res) => {
       difficult,
       question,
       questionType,
+      subjectQuestionType,
       grade,
       solution,
       metadata,
@@ -580,9 +632,10 @@ const createLesson = async (req, res) => {
     const { title, classId, subject } = req.body;
     const teacherId = req.user.userId;
     let lessonMetadata = null;
-    
+    let fileType = null;
     if (req.file) {
       try {
+        fileType = req.file.mimetype;
         lessonMetadata = await uploadToCloudinary(
           req.file.buffer,
           req.file.originalname,
@@ -599,7 +652,8 @@ const createLesson = async (req, res) => {
       classId,
       teacherId,
       subject,
-      lessonMetadata
+      lessonMetadata,
+      fileType: fileType
     });
     
     await newLesson.save();

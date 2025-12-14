@@ -1,4 +1,5 @@
 const mongoose = require('mongoose');
+const Question = require('./test_question');
 const { Schema } = mongoose;
 
 const testAnswerSchema = new Schema({
@@ -48,6 +49,10 @@ const testAnswerSchema = new Schema({
         default: Date.now
     },
     submit:{
+        type: Boolean,
+        default: false
+    },
+    isgraded:{
         type: Boolean,
         default: false
     }

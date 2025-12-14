@@ -25,6 +25,14 @@ const upload = multer({
     }
 });
 
+// Multer config cho upload tất cả loại file (không chỉ ảnh)
+const uploadAny = multer({
+    storage: storage,
+    limits: {
+        fileSize: 10 * 1024 * 1024, // Giới hạn 10MB
+    }
+});
+
 // Hàm upload file lên Cloudinary
 const uploadToCloudinary = async (buffer, originalName, folder = 'schoolManagement', resourceType = 'auto') => {
     try {
@@ -100,8 +108,10 @@ const deleteImageFromCloudinary = async (imgUrl) => {
         console.error('Error deleting image from Cloudinary:', error);
     }
 };
+
 module.exports = {
-    
+    upload,
+    uploadAny,
     handleImageUploads,
     uploadToCloudinary,
     deleteImageFromCloudinary

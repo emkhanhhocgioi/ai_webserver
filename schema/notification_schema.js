@@ -37,7 +37,7 @@ const NotificationSchema = new mongoose.Schema(
     // Ai gửi thông báo (giáo viên, admin…)
     sender: {
       type: mongoose.Schema.Types.ObjectId,
-      ref: "User",
+      ref: "Teacher" || "Admin",
       default: null,
     },
 

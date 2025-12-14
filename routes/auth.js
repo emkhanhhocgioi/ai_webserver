@@ -4,6 +4,7 @@ const jwt = require('jsonwebtoken');
 
 const teacherController = require('../controller/teacher_controller');
 const studentController = require('../controller/student_controller');
+const AdminController = require('../controller/admin_controller');
 const Admin = require('../schema/admin_schema');
 const bcrypt = require('bcrypt');
 const router = express.Router();
@@ -21,5 +22,9 @@ router.post('/student/login', studentController.loginStudent);
 router.post('/teacher/login', teacherController.login);
 
 
+// ==================== ADMIN ROUTES ====================
+
+// Route: Đăng nhập admin
+router.post('/admin/login', AdminController.adminLogin);
 
 module.exports = router;

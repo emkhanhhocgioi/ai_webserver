@@ -27,6 +27,14 @@ const upload_all = multer({
   }
 });
 
+
+
+// Teacher AI question answer generate route
+router.post('/ai/question-answer/generate', teacherTokenVerify, AI_controller.ai_qa_gen);
+router.post('/ai/auto-grading', teacherTokenVerify, AI_controller.Ai_auto_grade);
+router.post('/ai/auto-grading/file', teacherTokenVerify, AI_controller.Ai_Auto_Grading_from_file);
+
+
 // Teacher class management route
 router.get('/class', teacherTokenVerify, teacherController.TeacherGetClass);
 router.get('/class/subjects', teacherTokenVerify, teacherController.TeacherGetSubjectClass);
@@ -47,6 +55,7 @@ router.post('/tests/:testId/questions', teacherTokenVerify, upload.array('files'
 router.post('/tests/:testId/questions/single', teacherTokenVerify, upload.single('file'), teacherController.CreateQuestion);
 router.delete('/tests/questions/:questionId', teacherTokenVerify, teacherController.DeleteQuestion);
 router.put('/tests/questions/:questionId', teacherTokenVerify, upload.single('file'), teacherController.UpdateQuestion);
+router.post('/tests/question/math/generate', teacherTokenVerify, AI_controller.Ai_Generate_math_Question_Answer);
 
 // Teacher lesson management route
 router.post('/lessons/create', teacherTokenVerify, upload_all.single('file'), teacherController.createLesson);

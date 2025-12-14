@@ -4,10 +4,61 @@ const Student = require('../schema/student.js');
 const Subject_Teacher = require('../schema/subject_teacher.js');
 const Class_student = require('../schema/class_student.js');
 const Class = require('../schema/class_schema.js');
+const Admin = require('../schema/admin_schema.js');
 const bcrypt = require('bcrypt');
+const jwt = require('jsonwebtoken');
 
 
 // Student_Management Service APIs
+const adminLogin = async (req, res) => {    
+    try {
+        const { email, password } = req.body;
+        const admin = await Admin.findOne({ email: email });    
+        if (!admin) {   
+            return res.status(404).json({   
+                success: false,
+                message: "Admin không tồn tại"  
+            });
+        }
+        const isMatch = await bcrypt.compare(password, admin.password);
+        if (!isMatch) {
+            return res.status(401).json({
+                success: false,
+                message: "Mật khẩu không đúng"
+            });
+        }
+
+        // Tạo JWT token
+        const secret = process.env.JWT_SECRET || 'your_jwt_secret';
+        const token = jwt.sign(
+            { 
+                id: admin._id, 
+                email: admin.email,
+                urole: 'admin'
+            },
+            secret,
+            { expiresIn: '7d' }
+        );
+
+        res.status(200).json({
+            success: true,
+            admin: {
+                id: admin._id,
+                email: admin.email,
+                name: admin.name
+            },
+            token: token
+        });
+    } catch (error) {
+        console.error('Lỗi khi đăng nhập admin:', error);
+        res.status(500).json({
+            success: false,
+            message: "Lỗi server",
+            error: error.message
+        });
+    }
+};
+
 
 const createManyStudentsToClass = async (req, res) => {
     try {
@@ -758,6 +809,7 @@ const AdminUpdateTeacherByID = async (req , res) => {
     }
 };
 module.exports = {
+    adminLogin,
     AdminGetStudentData,
     createManyStudentsToClass,
     AdminGetStudentByID,

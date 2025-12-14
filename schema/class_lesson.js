@@ -26,6 +26,10 @@ const LessonSchema = new Schema({
     lessonMetadata: {
         type: Object,
         required: true
+    },
+    fileType:{
+        type: String,
+        required: true
     }
 });
 

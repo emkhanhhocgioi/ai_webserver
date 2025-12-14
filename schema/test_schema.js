@@ -24,8 +24,6 @@ const testSchema = new Schema({
         type: String ,
         default:0 
     },
-    test_time: { type: Number, required: true }, // in minutes
-    participants: { type: Number, required: true },
     createDate: { type: Date, required: true, default: Date.now },
     closeDate: { type: Date, required: true },
     status :{type: String, default: 'open' }
