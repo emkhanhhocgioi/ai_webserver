@@ -20,6 +20,10 @@ const studentSchema = new Schema ({
    averageScore: {
     type: Number,
     default: 0
+  },
+  lastLogin: {
+    type: Date,
+    default: null
   }
 },{ timestamps: true })
 

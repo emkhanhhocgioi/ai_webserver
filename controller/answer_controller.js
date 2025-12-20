@@ -178,7 +178,11 @@ const editUploadQuestion = async (req, res) => {
         if (idx !== -1) {
             answerDoc.answers[idx].answer = url;
         } else {
-            return res.status(404).json({ message: 'Question not found in submitted answers' });
+            // create new answer entry with the uploaded file URL
+            answerDoc.answers.push({
+            questionID: questionId,
+            answer: url
+            });
         }
 
         await answerDoc.save();

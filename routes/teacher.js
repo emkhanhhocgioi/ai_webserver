@@ -33,6 +33,7 @@ const upload_all = multer({
 router.post('/ai/question-answer/generate', teacherTokenVerify, AI_controller.ai_qa_gen);
 router.post('/ai/auto-grading', teacherTokenVerify, AI_controller.Ai_auto_grade);
 router.post('/ai/auto-grading/file', teacherTokenVerify, AI_controller.Ai_Auto_Grading_from_file);
+router.post('/ai/auto-grading/image', teacherTokenVerify, AI_controller.AI_Auto_Grading_from_image);
 
 
 // Teacher class management route
@@ -57,10 +58,16 @@ router.delete('/tests/questions/:questionId', teacherTokenVerify, teacherControl
 router.put('/tests/questions/:questionId', teacherTokenVerify, upload.single('file'), teacherController.UpdateQuestion);
 router.post('/tests/question/math/generate', teacherTokenVerify, AI_controller.Ai_Generate_math_Question_Answer);
 
+
 // Teacher lesson management route
 router.post('/lessons/create', teacherTokenVerify, upload_all.single('file'), teacherController.createLesson);
 router.get('/lessons', teacherTokenVerify, teacherController.getTeacherLessons);
 router.delete('/lessons/:lessonId', teacherTokenVerify, teacherController.DeleteLessonById);
 router.put('/lessons/:lessonId', teacherTokenVerify, upload_all.single('file'), teacherController.UpdateLesson);
 router.get('/lessons/:lessonId', teacherTokenVerify, teacherController.TeacherGetLessonsById);
+
+
+// Get analytics data
+router.get('/analytics/class/average-grades', teacherTokenVerify, teacherController.ClassAvarageGrades);
+router.get('/analytics/tests/performance', teacherTokenVerify, teacherController.TestsAnylytics);
 module.exports = router;

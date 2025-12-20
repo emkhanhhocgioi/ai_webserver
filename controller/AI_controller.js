@@ -192,7 +192,32 @@ const Ai_Auto_Grading_from_file = async (req, res) => {
         res.status(500).json({ error: 'Failed to grade essay from file.' });        
     }
 };
+const AI_Auto_Grading_from_image = async (req, res) => {
+    try {
+        const { exercise_question, student_answer_image_url,subject } = req.body;
+        console.log("Received answer image URL for grading:", req.body);
+        const subjectmap = {
+            'Toán': 'math',
+            'Ngữ Văn': 'van',
+            'Vật Lý': 'physics',
+            'Hóa Học': 'chemistry',
+            'Sinh Học': 'biology',
+            'Tiếng Anh': 'english',
+            'Lịch Sử': 'history',
+            'Địa Lý': 'geography'
+        };
+        const reqsubject = subjectmap[subject] || subject;
+        const response = await axios.post('http://localhost:8000/auto-grading/image', {
+            exercise_question,
+            fileUrl: student_answer_image_url,
+            subject: reqsubject,
+        });
+        res.status(200).json(response.data);       
+    } catch (error) {
 
+        res.status(500).json({ error: 'Failed to grade essay from image.' });        
+    }   
+};
 
 
 
@@ -204,6 +229,7 @@ module.exports = {
     Ai_Generate_math_Question_Answer,
     ai_qa_gen,
     Ai_Auto_Grading_from_file,
-    Ai_auto_grade
+    Ai_auto_grade,
+    AI_Auto_Grading_from_image
 
 };

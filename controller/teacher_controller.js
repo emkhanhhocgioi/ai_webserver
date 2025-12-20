@@ -11,6 +11,7 @@ const TestAnswer = require('../schema/test_answer');
 const Lesson = require('../schema/class_lesson');
 const { uploadToCloudinary,deleteImageFromCloudinary } = require('../midlewares/upload');
 const { CreateTestNotification } = require('./notifications_controller');
+const { logActivity } = require('../service/user_activity_service');
 // Controller functions
 const register = async (req, res) => {
   try {
@@ -293,6 +294,14 @@ const CreateTest = async (req, res) => {
     });
     await newTest.save();
     
+    // Log activity
+    await logActivity({
+      userId: teacherID,
+      role: 'teacher',
+      action: `Tạo bài kiểm tra: "${testtitle}"`,
+      testId: newTest._id
+    });
+    
     // Tạo và gửi thông báo cho học sinh
     try {
       const wsService = req.app.get('wsService');
@@ -326,6 +335,16 @@ const EditTestById = async (req, res) => {
     if (!updatedTest) {
       return res.status(404).json({ message: 'Bài kiểm tra không tồn tại' });
     }
+    
+    // Log activity
+    const teacherId = req.user.userId;
+    await logActivity({
+      userId: teacherId,
+      role: 'teacher',
+      action: `Chỉnh sửa bài kiểm tra: "${updatedTest.testtitle}"`,
+      testId: testId
+    });
+    
     res.status(200).json({  
       message: 'Bài kiểm tra đã được cập nhật thành công',
       test: updatedTest
@@ -342,6 +361,16 @@ const DeleteTestById = async (req, res) => {
     if (!deletedTest) {
       return res.status(404).json({ message: 'Bài kiểm tra không tồn tại' });
     }
+    
+    // Log activity
+    const teacherId = req.user.userId;
+    await logActivity({
+      userId: teacherId,
+      role: 'teacher',
+      action: `Xóa bài kiểm tra: "${deletedTest.testtitle}"`,
+      testId: testId
+    });
+    
     res.status(200).json({ message: 'Bài kiểm tra đã được xóa thành công' });
   } catch (error) { 
     res.status(500).json({ message: 'Đã xảy ra lỗi khi xóa bài kiểm tra' });
@@ -391,6 +420,15 @@ const TeacherGradingAsnwer = async (req, res) => {
     if (!updatedAnswer) {
       return res.status(404).json({ message: 'Câu trả lời không tồn tại' });
     }
+    
+    // Log activity
+    const teacherId = req.user.userId;
+    await logActivity({
+      userId: teacherId,
+      role: 'teacher',
+      action: `Chấm điểm bài làm của học sinh`,
+      testId: updatedAnswer.testID
+    });
     
     console.log("Updated answer:", updatedAnswer);
     
@@ -475,6 +513,15 @@ const CreateQuestion = async (req, res) => {
 
     await newQuestion.save();
 
+    // Log activity
+    const teacherId = req.user.userId;
+    await logActivity({
+      userId: teacherId,
+      role: 'teacher',
+      action: `Tạo câu hỏi cho bài kiểm tra`,
+      testId: testId
+    });
+
     res.status(201).json({ 
       message: 'Câu hỏi được tạo thành công', 
       question: newQuestion 
@@ -546,6 +593,16 @@ const DeleteQuestion = async (req, res) => {
     if (!deletedQuestion) {
       return res.status(404).json({ message: 'Câu hỏi không tồn tại' });
     }
+    
+    // Log activity
+    const teacherId = req.user.userId;
+    await logActivity({
+      userId: teacherId,
+      role: 'teacher',
+      action: `Xóa câu hỏi`,
+      testId: deletedQuestion.testid
+    });
+    
     res.status(200).json({ message: 'Câu hỏi đã được xóa thành công' });
   } catch (error) {
     res.status(500).json({ message: 'Đã xảy ra lỗi khi xóa câu hỏi' });
@@ -615,6 +672,16 @@ const UpdateQuestion = async (req, res) => {
     if (!updatedQuestion) {
       return res.status(404).json({ message: 'Câu hỏi không tồn tại' });
     }
+    
+    // Log activity
+    const teacherId = req.user.userId;
+    await logActivity({
+      userId: teacherId,
+      role: 'teacher',
+      action: `Cập nhật câu hỏi`,
+      testId: updatedQuestion.testid
+    });
+    
     res.status(200).json({
       message: 'Câu hỏi đã được cập nhật thành công',
       question: updatedQuestion
@@ -657,6 +724,15 @@ const createLesson = async (req, res) => {
     });
     
     await newLesson.save();
+    
+    // Log activity
+    await logActivity({
+      userId: teacherId,
+      role: 'teacher',
+      action: `Tạo bài học: "${title}"`,
+      lessonId: newLesson._id
+    });
+    
     res.status(201).json({ message: 'Lesson created successfully', lesson: newLesson });
   } catch (error) {
     res.status(500).json({ message: 'Error creating lesson' });
@@ -711,6 +787,16 @@ const DeleteLessonById = async (req, res) => {
     if (!deletedLesson) { 
       return res.status(404).json({ message: 'Lesson not found' }); 
     }
+    
+    // Log activity
+    const teacherId = req.user.userId;
+    await logActivity({
+      userId: teacherId,
+      role: 'teacher',
+      action: `Xóa bài học: "${deletedLesson.title}"`,
+      lessonId: lessonId
+    });
+    
     res.status(200).json({ message: 'Lesson deleted successfully' });
   } catch (error) {
     res.status(500).json({ message: 'Error deleting lesson' });
@@ -765,7 +851,17 @@ const UpdateLesson = async (req, res) => {
     const updatedLesson = await Lesson.findByIdAndUpdate(lessonId, updateData, { new: true });
     if (!updatedLesson) {
       return res.status(404).json({ message: 'Lesson not found' });
-    } 
+    }
+    
+    // Log activity
+  
+    await logActivity({
+      userId: teacherId,
+      role: 'teacher',
+      action: `Cập nhật bài học: "${updatedLesson.title}"`,
+      lessonId: lessonId
+    });
+    
     res.status(200).json({
       success: true,
       message: 'Lesson updated successfully',
@@ -779,6 +875,187 @@ const UpdateLesson = async (req, res) => {
 };
 
 
+
+// analytics and reports can be added here in the future
+const ClassAvarageGrades = async (req, res) => {  
+  try {
+    const teacherId = req.user.userId;
+    
+    if(!teacherId){
+      return res.status(400).json({ message: 'Teacher ID is required' });
+    }
+
+    const subjectClasses = await SubjectClass.find({ 
+      $or: [
+        { toan: teacherId },
+        { ngu_van: teacherId },
+        { tieng_anh: teacherId },
+        { vat_ly: teacherId },
+        { hoa_hoc: teacherId },
+        { sinh_hoc: teacherId },
+        { lich_su: teacherId },
+        { dia_ly: teacherId },
+        { giao_duc_cong_dan: teacherId },
+        { cong_nghe: teacherId },
+        { tin_hoc: teacherId },
+        { the_duc: teacherId },
+        { am_nhac: teacherId },
+        { my_thuat: teacherId }
+      ]
+    });
+
+    const classIds = subjectClasses.map(sc => sc.classid);
+
+    const classAverages = [];
+    for (const classId of classIds) {
+      const tests = await Test.find({ classID: classId });
+      let totalGrades = 0;
+      let gradeCount = 0;
+      let maxGrade = null;
+      let minGrade = null;
+
+      for (const test of tests) {
+        const answers = await TestAnswer.find({ testID: test._id, isgraded: true });
+        for (const answer of answers) {
+          const g = Number(answer.teacherGrade);
+          if (!Number.isFinite(g)) continue;
+          totalGrades += g;
+          gradeCount += 1;
+          if (maxGrade === null || g > maxGrade) maxGrade = g;
+          if (minGrade === null || g < minGrade) minGrade = g;
+        }
+      }
+
+      const averageGrade = gradeCount > 0 ? (totalGrades / gradeCount) : 0;
+      
+      // Get students with average grades below 4.0
+      const classStudents = await ClassStudent.find({ classID: classId }).populate('studentID', 'name email');
+      const studentsBelow40 = [];
+      
+      for (const classStudent of classStudents) {
+        if (!classStudent.studentID) continue;
+        
+        const studentId = classStudent.studentID._id;
+        const testIds = tests.map(t => t._id);
+        const studentAnswers = await TestAnswer.find({ 
+          testID: { $in: testIds }, 
+          studentID: studentId,
+          isgraded: true 
+        });
+        
+        let studentTotal = 0;
+        let studentCount = 0;
+        
+        for (const answer of studentAnswers) {
+          const grade = Number(answer.teacherGrade);
+          if (Number.isFinite(grade)) {
+            studentTotal += grade;
+            studentCount += 1;
+          }
+        }
+        
+        const studentAverage = studentCount > 0 ? (studentTotal / studentCount) : 0;
+        
+        if (studentAverage < 4.0 && studentCount > 0) {
+          studentsBelow40.push({
+            studentId: studentId,
+            studentName: classStudent.studentID.name,
+            studentEmail: classStudent.studentID.email,
+            averageGrade: studentAverage,
+            testCount: studentCount
+          });
+        }
+      }
+      
+      classAverages.push({
+        classId,
+        averageGrade,
+        highestGrade: maxGrade,
+        lowestGrade: minGrade,
+        gradedCount: gradeCount,
+        studentsBelow40: studentsBelow40
+      });
+    }
+    
+    res.status(200).json({ classAverages });
+    
+  } catch (error) {
+    res.status(500).json({ message: 'Error calculating class average grades' });
+    console.error('Error calculating class average grades:', error);
+    
+  }
+}
+const TestsAnylytics = async (req, res) => {
+  try {
+    const teacherId = req.user.userId;
+    if(!teacherId){
+      return res.status(400).json({ message: 'Teacher ID is required' });
+    }
+
+    // Get all classes where this teacher teaches
+    const classSubjects = await SubjectClass.find({ 
+      $or: [
+        { toan: teacherId },
+        { ngu_van: teacherId },
+        { tieng_anh: teacherId },
+        { vat_ly: teacherId },
+        { hoa_hoc: teacherId },
+        { sinh_hoc: teacherId },
+        { lich_su: teacherId },
+        { dia_ly: teacherId },
+        { giao_duc_cong_dan: teacherId },
+        { cong_nghe: teacherId },
+        { tin_hoc: teacherId },
+        { the_duc: teacherId },
+        { am_nhac: teacherId },
+        { my_thuat: teacherId }
+      ]
+    }).populate('classid');
+
+    const classIds = classSubjects.map(cs => cs.classid).filter(Boolean);
+    
+    // Get all tests assigned by this teacher
+    const allTests = await Test.find({ teacherID: teacherId });
+    const totalTestsAssigned = allTests.length;
+    
+    // Calculate submitted and unsubmitted counts
+    let totalSubmitted = 0;
+    let totalUnsubmitted = 0;
+    
+    for (const test of allTests) {
+      const classId = test.classID;
+      
+      // Get number of students in this class
+      const studentCount = await ClassStudent.countDocuments({ classID: classId });
+      
+      // Get number of submitted answers for this test
+      const submittedCount = await TestAnswer.countDocuments({ 
+        testID: test._id, 
+        submit: true 
+      });
+      
+      totalSubmitted += submittedCount;
+      
+      // Unsubmitted = total students - submitted
+      const unsubmittedForThisTest = studentCount - submittedCount;
+      totalUnsubmitted += unsubmittedForThisTest > 0 ? unsubmittedForThisTest : 0;
+    }
+
+    res.status(200).json({
+      message: 'Test analytics fetched successfully',
+      analytics: {
+        totalTestsAssigned: totalTestsAssigned,
+        totalSubmitted: totalSubmitted,
+        totalUnsubmitted: totalUnsubmitted
+      }
+    });
+
+  } catch (error) {
+    res.status(500).json({ message: 'Error fetching test analytics' });
+    console.error('Error fetching test analytics:', error);
+  }
+
+};
 
 module.exports = {
   register,
@@ -800,6 +1077,7 @@ module.exports = {
   getTeacherLessons ,
   DeleteLessonById,
   UpdateLesson,
-  TeacherGetLessonsById
-
+  TeacherGetLessonsById,
+  ClassAvarageGrades,
+  TestsAnylytics,
 };

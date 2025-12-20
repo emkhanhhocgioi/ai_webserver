@@ -11,6 +11,7 @@ const Lesson = require('../schema/class_lesson')
 
 const answerController = require('./answer_controller');
 const AI_controller = require('./AI_controller');
+const { logActivity } = require('../service/user_activity_service');
 
 
 // Search for lesson or test by query
@@ -40,6 +41,14 @@ const searchLessonsAndTests = async (req, res) => {
                 { testtitle: { $regex: query, $options: 'i' } },
             ]
         });
+        
+        // Log activity
+        await logActivity({
+            userId: studentId,
+            role: 'student',
+            action: `Tìm kiếm bài học và bài kiểm tra: "${query}"`
+        });
+        
         res.status(200).json({ lessons, tests });
     } catch (error) {
         res.status(500).json({ message: 'Error searching lessons and tests' });
@@ -56,6 +65,15 @@ const searchTeachersByQuery = async (req, res) => {
                 { email: { $regex: query, $options: 'i' } }
             ]
         });
+        
+        // Log activity
+        const studentId = req.user.userId;
+        await logActivity({
+            userId: studentId,
+            role: 'student',
+            action: `Tìm kiếm giáo viên: "${query}"`
+        });
+        
         res.status(200).json({ teachers });
     } catch (error) {
         res.status(500).json({ message: 'Error searching teachers' });
@@ -148,7 +166,10 @@ const loginStudent = async (req, res) => {
             console.log("Invalid password for email:", email);
             return res.status(401).json({ message: "Email hoặc mật khẩu không đúng" });
         }
-
+        
+        // Update last login time
+        student.lastLogin = new Date();
+        await student.save();
         // Create token with student ID
         const studentId = student._id.toString();
         const token = jwt.sign(

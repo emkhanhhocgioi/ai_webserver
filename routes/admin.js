@@ -34,6 +34,17 @@ router.get('/teacher/:id',adminVerify, controller.AdminGetTeacherById);
 router.delete('/teacher/delete/:id',adminVerify, controller.AdminDeleteTeacherByID);
 router.put('/teacher/update/:id',adminVerify, controller.AdminUpdateTeacherByID);
 
+// User Activity Logs Routes
+router.get('/activities',adminVerify, controller.getUserActivitiesLogs);
+router.get('/activity/:id',adminVerify, controller.getUserActivityById);
+router.get('/activities/export/csv',adminVerify, controller.ExportUserActivityLogsToCSV);
+
+// Test Report Routes
+router.get('/test-reports/class/:classId', adminVerify, controller.getTestReportByClass);
+router.get('/test-reports/test/:testId', adminVerify, controller.getTestReportById);
+router.get('/test-reports/student/:studentId', adminVerify, controller.getStudentTestPerformance);
+router.get('/test-reports/statistics', adminVerify, controller.getOverallTestStatistics);
+
 module.exports = router;
 
 

@@ -5,6 +5,10 @@ const Subject_Teacher = require('../schema/subject_teacher.js');
 const Class_student = require('../schema/class_student.js');
 const Class = require('../schema/class_schema.js');
 const Admin = require('../schema/admin_schema.js');
+const UserActivity = require('../schema/user_activities.js');
+const Test = require('../schema/test_schema.js');
+const TestAnswer = require('../schema/test_answer.js');
+const Question = require('../schema/test_question.js');
 const bcrypt = require('bcrypt');
 const jwt = require('jsonwebtoken');
 
@@ -611,7 +615,6 @@ const addSubjectTeacherForClass = async (req,res) => {
     }
 };
 
-
 // Teacher_Management Service APIs
 const AdminGetTeacherData = async (req, res) => {
     try {
@@ -808,6 +811,397 @@ const AdminUpdateTeacherByID = async (req , res) => {
         });
     }
 };
+
+
+// Report functions
+const generateClassPerformanceReport = async (classId) => {
+    try {
+        // Lấy tất cả học sinh trong lớp
+        const classStudents = await Class_student.find({ classID: classId }).populate('studentID');
+        if (classStudents.length === 0) {
+            return { success: false, message: "Không có học sinh trong lớp này" };
+        }
+        // Tính toán điểm trung bình và xếp loại học lực, hạnh kiểm
+        const reportData = classStudents.map(cs => {
+            const student = cs.studentID;
+            let academicPerformance = 'Chưa đánh giá';
+            let conduct = 'Chưa đánh giá';
+            if (student.academic_performance) {
+                academicPerformance = student.academic_performance;
+            }
+            if (student.conduct) {
+                conduct = student.conduct;
+            }
+            return {
+                studentId: student._id,
+                name: student.name,
+                averageScore: student.averageScore || 0,    
+                academicPerformance: academicPerformance,
+                conduct: conduct
+            };
+        });
+        return { success: true, data: reportData };
+    } catch (error) {
+        console.error('Lỗi khi tạo báo cáo hiệu suất lớp:', error);
+        return {
+            success: false,
+            message: "Lỗi server",
+            error: error.message
+        };
+    }
+};
+
+const getUserActivityById = async (req, res) => {
+    try {
+        const activityId = req.params.id;
+        
+        if (!activityId) {
+            return res.status(400).json({
+                success: false,
+                message: "ID hoạt động là bắt buộc"
+            });
+        }
+
+        const activity = await UserActivity.findById(activityId)
+            .populate('teacherId', 'name email')
+            .populate('studentId', 'name email')
+            .populate('testId', 'title')
+            .populate('lessonId', 'title');
+        
+        if (!activity) {
+            return res.status(404).json({
+                success: false,
+                message: "Không tìm thấy hoạt động"
+            });
+        }
+
+        res.status(200).json({
+            success: true,
+            activity: activity
+        });
+    } catch (error) {
+        console.error('Lỗi khi lấy hoạt động theo ID:', error);
+        res.status(500).json({
+            success: false,
+            message: "Lỗi server",
+            error: error.message
+        });
+    }
+}
+const getUserActivitiesLogs = async (req, res) => {
+    try {
+        const { 
+            role,           // Filter by role: 'student' or 'teacher'
+            userId,         // Filter by specific user ID (teacher or student)
+            action,         // Filter by action type
+            startDate,      // Filter by date range
+            endDate,
+            page = 1,       // Pagination
+            limit = 50
+        } = req.query;
+
+        // Build filter query
+        const filter = {};
+        
+        if (role) {
+            filter.role = role;
+        }
+        
+        if (userId) {
+            // Check both teacherId and studentId
+            filter.$or = [
+                { teacherId: userId },
+                { studentId: userId }
+            ];
+        }
+        
+        if (action) {
+            filter.action = action;
+        }
+        
+        // Date range filter
+        if (startDate || endDate) {
+            filter.createdAt = {};
+            if (startDate) {
+                filter.createdAt.$gte = new Date(startDate);
+            }
+            if (endDate) {
+                filter.createdAt.$lte = new Date(endDate);
+            }
+        }
+
+        // Calculate skip for pagination
+        const skip = (parseInt(page) - 1) * parseInt(limit);
+
+        // Get total count for pagination
+        const total = await UserActivity.countDocuments(filter);
+
+        // Get activities with pagination
+        const activities = await UserActivity.find(filter)
+            .populate('teacherId', 'name email')
+            .populate('studentId', 'name email')
+            .populate('testId', 'title')
+            .populate('lessonId', 'title')
+            .sort({ createdAt: -1 })
+            .skip(skip)
+            .limit(parseInt(limit));
+
+        res.status(200).json({
+            success: true,
+            data: {
+                activities: activities,
+                pagination: {
+                    total: total,
+                    page: parseInt(page),
+                    limit: parseInt(limit),
+                    totalPages: Math.ceil(total / parseInt(limit))
+                }
+            }
+        });
+    } catch (error) {
+        console.error('Lỗi khi lấy danh sách hoạt động:', error);
+        res.status(500).json({
+            success: false,
+            message: "Lỗi server",
+            error: error.message
+        });
+    }
+}
+const ExportUserActivityLogsToCSV = async (req, res) => {
+    try {
+        const { 
+            role,
+            userId,
+            action,
+            startDate,
+            endDate
+        } = req.query;
+
+        // Build filter query (same as getUserActivitiesLogs)
+        const filter = {};
+        
+        if (role) {
+            filter.role = role;
+        }
+        
+        if (userId) {
+            filter.$or = [
+                { teacherId: userId },
+                { studentId: userId }
+            ];
+        }
+        
+        if (action) {
+            filter.action = action;
+        }
+        
+        if (startDate || endDate) {
+            filter.createdAt = {};
+            if (startDate) {
+                filter.createdAt.$gte = new Date(startDate);
+            }
+            if (endDate) {
+                filter.createdAt.$lte = new Date(endDate);
+            }
+        }
+
+        // Get all activities matching the filter
+        const activities = await UserActivity.find(filter)
+            .populate('teacherId', 'name email')
+            .populate('studentId', 'name email')
+            .populate('testId', 'title')
+            .populate('lessonId', 'title')
+            .sort({ createdAt: -1 });
+
+        if (activities.length === 0) {
+            return res.status(404).json({
+                success: false,
+                message: "Không có dữ liệu để xuất"
+            });
+        }
+
+        // Create CSV header
+        const csvHeader = 'ID,Role,User,Email,Action,Test,Lesson,Created At\n';
+        
+        // Create CSV rows
+        const csvRows = activities.map(activity => {
+            const userId = activity.role === 'teacher' ? activity.teacherId : activity.studentId;
+            const userName = userId ? userId.name : 'N/A';
+            const userEmail = userId ? userId.email : 'N/A';
+            const testTitle = activity.testId ? activity.testId.title : 'N/A';
+            const lessonTitle = activity.lessonId ? activity.lessonId.title : 'N/A';
+            const createdAt = new Date(activity.createdAt).toISOString();
+            
+            return `"${activity._id}","${activity.role}","${userName}","${userEmail}","${activity.action}","${testTitle}","${lessonTitle}","${createdAt}"`;
+        }).join('\n');
+
+        const csvContent = csvHeader + csvRows;
+
+        // Set headers for CSV download
+        const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+        res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+        res.setHeader('Content-Disposition', `attachment; filename="user_activities_${timestamp}.csv"`);
+        
+        res.status(200).send(csvContent);
+    } catch (error) {
+        console.error('Lỗi khi xuất CSV:', error);
+        res.status(500).json({
+            success: false,
+            message: "Lỗi server",
+            error: error.message
+        });
+    }
+};
+
+const getTestReportByClass = async (req, res) => {
+    try {
+        const classId = req.params.classId; 
+
+        if (!classId) {
+            return res.status(400).json({
+                success: false,
+                message: "classId là bắt buộc"
+            });
+        }
+        
+        const ClassTests = await Test.find({ classID: classId })
+            .populate('teacherID', 'name email');
+        
+        console.log("Bài kiểm tra trong lớp:", ClassTests);
+        
+        if (ClassTests.length === 0) {
+            return res.status(404).json({
+                success: false, 
+                message: "Không có bài kiểm tra nào trong lớp này"
+            });
+        }
+        
+        const testReports = [];
+        let allScores = []; 
+        let totalAttempts = 0;
+        let completedAttempts = 0;
+        
+        for (const test of ClassTests) {
+            const testId = test._id;
+            const testTitle = test.testtitle;
+            const testSubject = test.subject;
+            const createDate = test.createDate;
+            const closeDate = test.closeDate;
+            const status = test.status;
+
+            // Lấy tất cả kết quả bài kiểm tra cho bài kiểm tra này
+            const testResults = await TestAnswer.find({ testID: testId })
+                .populate('studentID', 'name email');
+            
+            totalAttempts += testResults.length;
+            
+            // Thu thập điểm và đếm bài hoàn thành
+            const resultsWithScores = testResults.map(result => {
+                // Ưu tiên teacherGrade, nếu không có thì dùng AIGrade
+                const score = result.teacherGrade || result.AIGrade || 0;
+                
+                if (result.submit && result.isgraded) {
+                    allScores.push(score);
+                    completedAttempts++;
+                }
+                
+                return {
+                    studentId: result.studentID?._id,
+                    studentName: result.studentID?.name,
+                    studentEmail: result.studentID?.email,
+                    teacherGrade: result.teacherGrade,
+                    AIGrade: result.AIGrade,
+                    teacherComments: result.teacherComments,
+                    submissionTime: result.submissionTime,
+                    submit: result.submit,
+                    isgraded: result.isgraded,
+                    score: score,
+                    totalQuestions: result.answers?.length || 0,
+                    correctAnswers: result.answers?.filter(a => a.isCorrect).length || 0
+                };
+            });
+            
+            testReports.push({
+                testId,
+                testTitle,
+                testSubject,
+                createDate,
+                closeDate,
+                status,
+                teacher: test.teacherID,
+                results: resultsWithScores
+            });
+        }
+        
+        // Tính toán summary metrics
+        const summary = {
+            totalAttempts,
+            completedAttempts,
+            averageScore: 0,
+            highestScore: 0,
+            lowestScore: 0,
+            passRate: 0
+        };
+        
+        if (allScores.length > 0) {
+            const sum = allScores.reduce((acc, score) => acc + score, 0);
+            summary.averageScore = parseFloat((sum / allScores.length).toFixed(2));
+            summary.highestScore = Math.max(...allScores);
+            summary.lowestScore = Math.min(...allScores);
+            
+            // Tính pass rate (điểm >= 5.0 là đạt)
+            const passedCount = allScores.filter(score => score >= 5.0).length;
+            summary.passRate = parseFloat(((passedCount / allScores.length) * 100).toFixed(2));
+        }
+        
+        // Tính toán score distribution
+        const scoreDistribution = [
+            { range: "0-2", count: 0 },
+            { range: "2-4", count: 0 },
+            { range: "4-6", count: 0 },
+            { range: "6-8", count: 0 },
+            { range: "8-10", count: 0 }
+        ];
+        
+        allScores.forEach(score => {
+            if (score >= 0 && score < 2) {
+                scoreDistribution[0].count++;
+            } else if (score >= 2 && score < 4) {
+                scoreDistribution[1].count++;
+            } else if (score >= 4 && score < 6) {
+                scoreDistribution[2].count++;
+            } else if (score >= 6 && score < 8) {
+                scoreDistribution[3].count++;
+            } else if (score >= 8 && score <= 10) {
+                scoreDistribution[4].count++;
+            }
+        });
+        
+        res.status(200).json({
+            success: true,
+            data: {
+                summary,
+                scoreDistribution,
+                tests: testReports
+            }
+        });
+        
+    } catch (error) {   
+        console.error('Lỗi khi lấy báo cáo bài kiểm tra theo lớp:', error);  
+        res.status(500).json({
+            success: false,
+            message: "Lỗi server",
+            error: error.message 
+        });
+    }
+}
+const getTestReportById = async (req, res) => {
+}
+const getStudentTestPerformance = async (req, res) => {
+}
+const getOverallTestStatistics = async (req, res) => {
+};
+
 module.exports = {
     adminLogin,
     AdminGetStudentData,
@@ -829,5 +1223,14 @@ module.exports = {
     AdminCreateTeacherAccount,
     AdminGetTeacherById,
     AdminDeleteTeacherByID,
-    AdminUpdateTeacherByID
+    AdminUpdateTeacherByID,
+    generateClassPerformanceReport,
+    getUserActivityById,
+    getUserActivitiesLogs,
+    ExportUserActivityLogsToCSV,
+    // Test Report APIs
+    getTestReportByClass,
+    getTestReportById,
+    getStudentTestPerformance,
+    getOverallTestStatistics
 }
