@@ -24,7 +24,35 @@ const studentSchema = new Schema ({
   lastLogin: {
     type: Date,
     default: null
-  }
+  },
+  dailyQuestionSubject: {
+    type: String,
+    enum: ['Toán', 'Văn', 'Anh', 'Lý', 'Hóa', 'Sinh', 'Sử', 'Địa', 'GDCD'],
+    default: 'Toán'
+  },
+  dailyPracticeQuestion: [{
+    question: {
+      type: String,
+      required: true
+    },
+    answer: {
+      type: String,
+      required: true
+    },
+    ai_score: {
+      type: Number,
+      min: 0,
+      max: 10
+    },
+    improvement_suggestion: {
+      type: String
+    },
+    createdAt: {
+      type: Date,
+      default: Date.now
+    }
+  }]
+ 
 },{ timestamps: true })
 
 const Student =  mongoose.model("Student", studentSchema);

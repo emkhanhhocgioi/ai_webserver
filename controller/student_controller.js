@@ -167,9 +167,15 @@ const loginStudent = async (req, res) => {
             return res.status(401).json({ message: "Email hoặc mật khẩu không đúng" });
         }
         
+        // Check if lastLogin is more than 24 hours ago
+        const now = new Date();
+        const lastLogin = student.lastLogin;
+        const hoursSinceLastLogin = lastLogin ? (now - lastLogin) / (1000 * 60 * 60) : 25; // Default to 25 if no lastLogin
+        
         // Update last login time
-        student.lastLogin = new Date();
+        student.lastLogin = now;
         await student.save();
+        
         // Create token with student ID
         const studentId = student._id.toString();
         const token = jwt.sign(
@@ -188,6 +194,41 @@ const loginStudent = async (req, res) => {
         // Decode token to verify
         const decoded = jwt.decode(token);
         console.log("Token payload:", JSON.stringify(decoded, null, 2));
+
+        // Generate daily question if more than 24 hours since last login
+        if (hoursSinceLastLogin >= 24) {
+            console.log("Generating daily question - Last login was", hoursSinceLastLogin.toFixed(2), "hours ago");
+            const subject = student.dailyQuestionSubject || 'Toán'; // Default to Toán if not set
+            
+            // Call in background without blocking the login response
+            getRecentTestData(studentId)
+                .then(recentTests => AI_controller.Ai_Daily_Generate_Question_Answer(subject, recentTests))
+                .then(response => {
+                    if (response) {
+                        // Save the daily question to student profile
+                        Student.findById(studentId).then(studentDoc => {
+                            if (studentDoc) {
+                                studentDoc.dailyPracticeQuestion.push({
+                                    question: response.question,
+                                    answer: response.answer,
+                                    ai_score: response.ai_score,
+                                    improvement_suggestions: response.improvement_suggestions
+                                });
+                                studentDoc.save().then(() => {
+                                    console.log("Daily question generated and saved successfully");
+                                }).catch(err => {
+                                    console.error("Error saving daily question:", err);
+                                });
+                            }
+                        }).catch(err => {
+                            console.error("Error fetching student for daily question:", err);
+                        });
+                    }
+                })
+                .catch(error => {
+                    console.error("Error generating daily question:", error);
+                });
+        }
 
         res.status(200).json({
             message: "Đăng nhập thành công",
@@ -451,7 +492,152 @@ const getStudentLessons = async (req, res) => {
     }
 };
 
+const getRecentTestData = async (studentId) => {
+    try {
+        // Lấy tất cả câu trả lời đã nộp của học sinh, sắp xếp theo thời gian tạo giảm dần và giới hạn 3 bản ghi
+        const recentAnswers = await TestAnswer.find({ studentID: studentId, submit: true })
+            .sort({ createdAt: -1 })
+            .limit(3)
+            .populate('testID');
+        return recentAnswers;
+    } catch (error) {
+        console.error('Lỗi lấy dữ liệu bài kiểm tra gần đây:', error);
+        throw error;
+    }
+};
 
+const DailyTestSubjectChange = async (req,res) => {
+    try {
+        const studentid = req.user.userId;
+        const {subject} = req.body;
+        const student = await Student.findById(studentid);
+        if (!student) {
+            return res.status(404).json({ message: "Học sinh không tìm thấy" });
+        }
+        student.dailyQuestionSubject = subject;
+        await student.save();
+        res.status(200).json({ message: "Thay đổi môn câu hỏi hàng ngày thành công", dailyQuestionSubject: subject });
+    }catch (error) {    
+        console.error('Lỗi thay đổi môn câu hỏi hàng ngày:', error);
+        res.status(500).json({ message: "Lỗi server" });
+    }
+}
+const Ai_Daily_Generate_Question_Answer = async (req, res) => {   
+    try {
+        const studentid = req.user.userId;
+        const {subject} = req.body;
+        console.log("Received subject:", subject);
+        console.log("Received student ID:", studentid);
+        const recentTests =  await getRecentTestData(studentid);
+        console.log("Recent Tests Data:", recentTests);
+        
+        const response = await AI_controller.Ai_Daily_Generate_Question_Answer(subject, recentTests);
+        if (!response) {
+            return res.status(500).json({ error: 'Failed to generate question and answer.' });
+        }
+        console.log("AI Response:", response);
+        const student = await Student.findById(studentid);
+        // Lưu câu hỏi hàng ngày vào hồ sơ học sinh
+        student.dailyPracticeQuestion.push({
+            question: response.question,
+            answer: response.answer,
+            ai_score: response.ai_score,
+            improvement_suggestions: response.improvement_suggestions
+        });
+        await student.save();
+        res.status(200).json(response);
+    }catch (error) {
+        console.error('Error generating question and answer:', error);
+        res.status(500).json({ error: 'Failed to generate question and answer.' });        
+    }
+};
+const GetDailyQuestionAnswer = async (req, res) => {
+    try {
+        const studentid = req.user.userId;
+        const student = await Student.findById(studentid);
+        if (!student) {
+            return res.status(404).json({ message: "Học sinh không tìm thấy" });
+        }
+        res.status(200).json(student.dailyPracticeQuestion);
+
+    } catch (error) {
+        res.status(500).json({ message: "Lỗi server" });
+        console.error('Lỗi lấy câu hỏi hàng ngày:', error);
+    }
+}
+
+const Ai_Auto_Grade_And_Save = async (req, res) => {
+    try {
+        const { exercise_question, student_answer, subject, question, save_to_daily } = req.body;
+        const studentid = req.user.userId;
+        
+        console.log("Received answer text for grading:", student_answer);
+        console.log("Subject for grading:", subject);
+        console.log("Exercise question:", exercise_question);
+        
+        // Map subject Vietnamese to English
+        const subjectmap = {
+            'Toán': 'math',
+            'Ngữ Văn': 'van',
+            'Vật Lý': 'physics',
+            'Hóa Học': 'chemistry',
+            'Sinh Học': 'biology',
+            'Tiếng Anh': 'english',
+            'Lịch Sử': 'history',
+            'Địa Lý': 'geography'
+        };
+        const reqsubject = subjectmap[subject] || subject;
+        
+        // Call AI grading service
+        const axios = require('axios');
+        const response = await axios.post('http://localhost:8000/auto-grading', {
+            exercise_question,
+            student_answer,
+            subject: reqsubject,
+        });
+        
+        const gradingResult = response.data;
+        
+        // If save_to_daily is true, save the score to daily practice question
+        if (save_to_daily && question) {
+            const student = await Student.findById(studentid);
+            if (!student) {
+                return res.status(404).json({ 
+                    message: "Học sinh không tìm thấy",
+                    gradingResult 
+                });
+            }
+            
+            // Find the question in dailyPracticeQuestion array
+            const dailyQuestion = student.dailyPracticeQuestion.find(q => q.question === question);
+            if (dailyQuestion) {
+                dailyQuestion.ai_score = gradingResult.question_score || gradingResult.score;
+                dailyQuestion.improvement_suggestions = gradingResult.improvement_suggestion || gradingResult.improvement_suggestions;
+                await student.save();
+                
+                return res.status(200).json({ 
+                    ...gradingResult,
+                    message: "Chấm điểm và lưu thành công"
+                });
+            } else {
+                return res.status(404).json({ 
+                    message: "Câu hỏi hàng ngày không tìm thấy",
+                    gradingResult 
+                });
+            }
+        }
+        
+        // Return grading result without saving
+        res.status(200).json(gradingResult);
+        
+    } catch (error) {
+        console.error('Error auto grading and saving:', error);
+        res.status(500).json({ 
+            message: "Lỗi server",
+            error: error.message 
+        });
+    }
+}
 module.exports = {
     registerStudent,
     loginStudent,
@@ -465,5 +651,9 @@ module.exports = {
     getAllSubjectsGrade,
     searchLessonsAndTests,
     searchTeachersByQuery,
-    TeacherContact
+    TeacherContact,
+    Ai_Daily_Generate_Question_Answer,
+    DailyTestSubjectChange,
+    GetDailyQuestionAnswer,
+    Ai_Auto_Grade_And_Save
 };

@@ -144,6 +144,8 @@ const Ai_auto_grade = async (req, res) => {
     try {
         const { exercise_question, student_answer ,subject} = req.body;
         console.log("Received answer text for grading:", student_answer);
+        console.log("Subject for grading:", subject);
+        console.log("Exercise question:", exercise_question);
          const subjectmap = {
             'Toán': 'math',
             'Ngữ Văn': 'van',
@@ -219,7 +221,42 @@ const AI_Auto_Grading_from_image = async (req, res) => {
     }   
 };
 
-
+const Ai_Daily_Generate_Question_Answer = async (subject, recentTests) => {
+    try {
+        // Map subject Vietnamese to English
+        const subjectmap = {
+            'Toán': 'math',
+            'Ngữ Văn': 'van',
+            'Vật Lý': 'physics',
+            'Hóa Học': 'chemistry',
+            'Sinh Học': 'biology',
+            'Tiếng Anh': 'english',
+            'Lịch Sử': 'history',
+            'Địa Lý': 'geography'
+        };
+        const reqsubject = subjectmap[subject] || subject;
+        
+        // Extract test information từ recentTests
+        const testInfo = recentTests.map(test => ({
+            subject: test.testID?.subject || '',
+            title: test.testID?.testtitle || '',
+            score: test.teacherGrade || 0,
+            submissionTime: test.submissionTime
+        }));
+        
+        console.log("Sending to AI:", { subject: reqsubject, recentTests: testInfo });
+        
+        const response = await axios.post('http://localhost:8000/performance/question-generation', {
+            subject: reqsubject,
+            recent_tests: testInfo
+        });
+        
+        return response.data;
+    } catch (error) {
+        console.error('Error generating daily question:', error);
+        throw error;
+    }
+};
 
 module.exports = {
     Ai_Generate_Question_Answer,
@@ -230,6 +267,6 @@ module.exports = {
     ai_qa_gen,
     Ai_Auto_Grading_from_file,
     Ai_auto_grade,
-    AI_Auto_Grading_from_image
-
+    AI_Auto_Grading_from_image,
+    Ai_Daily_Generate_Question_Answer
 };

@@ -8,6 +8,11 @@ const notificationController = require('../controller/notifications_controller')
 const answerController = require('../controller/answer_controller');
 const { uploadAny } = require('../midlewares/upload');
 
+
+// Student personal
+router.put('/personal/daily-question-subject', verifyStudentToken, studentController.DailyTestSubjectChange);
+router.get('/personal/daily-question-answer', verifyStudentToken, studentController.GetDailyQuestionAnswer);
+
 // Notification routes
 router.get('/notifications', verifyStudentToken, notificationController.getStudentNotifications);
 router.patch('/notifications/:notificationId/read', verifyStudentToken, notificationController.markNotificationAsRead);
@@ -23,6 +28,8 @@ router.get('/info', verifyStudentToken, studentController.getStudentDataById);
 router.post('/ai/generate/teacher_comment', verifyStudentToken ,AI_controller.Ai_Generate_Base_on_TeacherComment);
 router.post('/ai/grading/essay', verifyStudentToken ,AI_controller.AI_Grading_essay);
 router.post('/ai/recent-incorrect-answers', verifyStudentToken, studentController.GetRecentInCorrectAnswers);
+router.post('/ai/daily-question-answer', verifyStudentToken, studentController.Ai_Daily_Generate_Question_Answer);
+router.post('/ai/auto-grade', verifyStudentToken, studentController.Ai_Auto_Grade_And_Save);
 
 
 // Grade Summary routes
@@ -42,8 +49,5 @@ router.get('/lessons', verifyStudentToken, studentController.getStudentLessons);
 // Teacher contact routes
 router.get('/teachers/contact', studentController.TeacherContact);
 
-// Notification routes
-router.get('/notifications', verifyStudentToken, notificationController.getStudentNotifications);
-router.patch('/notifications/:notificationId/read', verifyStudentToken, notificationController.markNotificationAsRead);
 
 module.exports = router;
