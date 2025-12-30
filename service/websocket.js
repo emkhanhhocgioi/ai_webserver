@@ -152,7 +152,8 @@ class WebSocketService {
                                 }));
                             }
                             break;
-                       
+                        
+
                         default:
                             console.log('Unknown message type:', data.type);
                     }

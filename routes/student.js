@@ -49,5 +49,7 @@ router.get('/lessons', verifyStudentToken, studentController.getStudentLessons);
 // Teacher contact routes
 router.get('/teachers/contact', studentController.TeacherContact);
 
+// Schedule routes
+router.get('/schedule', verifyStudentToken, studentController.getStudentSchedule);
 
 module.exports = router;

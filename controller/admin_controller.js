@@ -9,6 +9,8 @@ const UserActivity = require('../schema/user_activities.js');
 const Test = require('../schema/test_schema.js');
 const TestAnswer = require('../schema/test_answer.js');
 const Question = require('../schema/test_question.js');
+const TeachingSchedule = require('../schema/teaching_schedule.js');
+const TimeSlot = require('../schema/time_slot_schema.js');
 const bcrypt = require('bcrypt');
 const jwt = require('jsonwebtoken');
 
@@ -1202,6 +1204,202 @@ const getStudentTestPerformance = async (req, res) => {
 const getOverallTestStatistics = async (req, res) => {
 };
 
+// Schedule Management APIs
+const assignTeacherToTimeSlot = async (req, res) => {
+    try {
+        const { teacherId, classId, timeSlotId, semester } = req.body;
+
+        // Validate required fields
+        if (!teacherId || !classId || !timeSlotId || !semester) {
+            return res.status(400).json({
+                success: false,
+                message: "Vui lòng cung cấp đầy đủ thông tin: teacherId, classId,  timeSlotId, semester"
+            });
+        }
+
+        // Check if teacher exists
+        const teacher = await Teacher.findById(teacherId);
+        if (!teacher) {
+            return res.status(404).json({
+                success: false,
+                message: "Không tìm thấy giáo viên"
+            });
+        }
+
+        // Check if class exists
+        const classData = await Class.findById(classId);
+        if (!classData) {
+            return res.status(404).json({
+                success: false,
+                message: "Không tìm thấy lớp học"
+            });
+        }
+
+        // Check if timeslot exists
+        const timeSlot = await TimeSlot.findById(timeSlotId);
+        if (!timeSlot) {
+            return res.status(404).json({
+                success: false,
+                message: "Không tìm thấy khung giờ"
+            });
+        }
+
+        // Check for teacher schedule conflict
+        const teacherConflict = await TeachingSchedule.findOne({
+            teacherId: teacherId,
+            timeSlotId: timeSlotId,
+            semester: semester
+        });
+
+        if (teacherConflict) {
+            return res.status(409).json({
+                success: false,
+                message: "Giáo viên đã có lịch dạy vào khung giờ này trong học kỳ này"
+            });
+        }   
+
+        // Check for class schedule conflict
+        const classConflict = await TeachingSchedule.findOne({
+            classId: classId,
+            timeSlotId: timeSlotId,
+            semester: semester
+        });
+
+        if (classConflict) {
+            return res.status(409).json({
+                success: false,
+                message: "Lớp học đã có lịch học vào khung giờ này trong học kỳ này"
+            });
+        }
+
+        // Create new teaching schedule
+        const newSchedule = new TeachingSchedule({
+            teacherId,
+            classId,
+            timeSlotId,
+            semester
+        });
+
+        await newSchedule.save();
+
+        // Populate the schedule with full details
+        const populatedSchedule = await TeachingSchedule.findById(newSchedule._id)
+            .populate('teacherId', 'name email subject')
+            .populate('classId', 'class_code class_year')
+            .populate('timeSlotId', 'dayOfWeek startTime endTime');
+
+        res.status(201).json({
+            success: true,
+            message: "Gán giáo viên vào khung giờ thành công",
+            schedule: populatedSchedule
+        });
+
+    } catch (error) {
+        console.error('Lỗi khi gán giáo viên vào khung giờ:', error);
+        res.status(500).json({
+            success: false,
+            message: "Lỗi server",
+            error: error.message
+        });
+    }
+};
+
+const getClassSchedule = async (req, res) => {
+    try {
+        const { classId } = req.params;
+        const { semester } = req.query;
+
+        // Validate classId
+        if (!classId) {
+            return res.status(400).json({
+                success: false,
+                message: "Vui lòng cung cấp classId"
+            });
+        }
+
+        // Check if class exists
+        const classData = await Class.findById(classId);
+        if (!classData) {
+            return res.status(404).json({
+                success: false,
+                message: "Không tìm thấy lớp học"
+            });
+        }
+
+        // Build query
+        const query = { classId: classId };
+        if (semester) {
+            query.semester = semester;
+        }
+
+        // Get all teaching schedules for the class
+        const schedules = await TeachingSchedule.find(query)
+            .populate('teacherId', 'name email subject')
+            .populate('timeSlotId', 'dayOfWeek startTime endTime')
+            .sort({ 'timeSlotId.dayOfWeek': 1, 'timeSlotId.startTime': 1 });
+         
+        console.log("Lịch trình lớp học:", schedules);
+        
+        // Organize schedule by day of week
+        const organizedSchedule = {
+            Mon: [],
+            Tue: [],
+            Wed: [],
+            Thu: [],
+            Fri: [],
+            Sat: [],
+            Sun: []
+        };
+
+        schedules.forEach(schedule => {
+            if (schedule.timeSlotId && schedule.timeSlotId.dayOfWeek) {
+                organizedSchedule[schedule.timeSlotId.dayOfWeek].push({
+                    scheduleId: schedule._id,
+                    teacher: {
+                        id: schedule.teacherId?._id,
+                        name: schedule.teacherId?.name,
+                        email: schedule.teacherId?.email
+                    },
+                    subject: schedule.teacherId?.subject, // Lấy trực tiếp từ teacherId
+                    timeSlot: {
+                        startTime: schedule.timeSlotId.startTime,
+                        endTime: schedule.timeSlotId.endTime
+                    },
+                    semester: schedule.semester
+                });
+            }
+        });
+
+        res.status(200).json({
+            success: true,
+            class: {
+                id: classData._id,
+                class_code: classData.class_code,
+                class_year: classData.class_year
+            },
+            totalSchedules: schedules.length,
+            schedules: organizedSchedule
+        });
+
+    } catch (error) {
+        console.error('Lỗi khi lấy lịch trình lớp học:', error);
+        res.status(500).json({
+            success: false,
+            message: "Lỗi server",
+            error: error.message
+        });
+    }
+};
+
+const getTimeSlot =  async (req, res) => {
+    try {
+        const timeSlots = await TimeSlot.find({});
+        res.status(200).json({ success: true, data: timeSlots });
+    } catch (err) {
+        res.status(500).json({ success: false, message: err.message });
+    }
+};
+
 module.exports = {
     adminLogin,
     AdminGetStudentData,
@@ -1232,5 +1430,9 @@ module.exports = {
     getTestReportByClass,
     getTestReportById,
     getStudentTestPerformance,
-    getOverallTestStatistics
+    getOverallTestStatistics,
+    // Schedule Management APIs
+    assignTeacherToTimeSlot,
+    getClassSchedule,
+    getTimeSlot
 }

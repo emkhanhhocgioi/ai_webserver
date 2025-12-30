@@ -8,6 +8,8 @@ const ClassStudent = require('../schema/class_student')
 const Question = require('../schema/test_question')
 const TestAnswer = require('../schema/test_answer')
 const Lesson = require('../schema/class_lesson')
+const TeachingSchedule = require('../schema/teaching_schedule')
+const TimeSlot = require('../schema/time_slot_schema')
 
 const answerController = require('./answer_controller');
 const AI_controller = require('./AI_controller');
@@ -638,6 +640,98 @@ const Ai_Auto_Grade_And_Save = async (req, res) => {
         });
     }
 }
+
+// Get student's class schedule
+const getStudentSchedule = async (req, res) => {
+    try {
+        const studentId = req.user.userId;
+        const { semester } = req.query;
+
+        // Find student's class
+        const classStudent = await ClassStudent.findOne({ studentID: studentId });
+        if (!classStudent) {
+            return res.status(404).json({
+                success: false,
+                message: "Học sinh chưa được phân vào lớp nào"
+            });
+        }
+
+        const classId = classStudent.classID;
+
+        // Build query
+        const query = { classId: classId };
+        if (semester) {
+            query.semester = semester;
+        }
+
+        // Get all teaching schedules for the class
+        const schedules = await TeachingSchedule.find(query)
+            .populate('teacherId', 'name email subject phoneNumber')
+            .populate('timeSlotId', 'dayOfWeek startTime endTime session period')
+            .populate('classId', 'class_code class_year')
+            .sort({ 'timeSlotId.dayOfWeek': 1, 'timeSlotId.startTime': 1 });
+
+        // Organize schedule by day of week
+        const organizedSchedule = {
+            Mon: [],
+            Tue: [],
+            Wed: [],
+            Thu: [],
+            Fri: [],
+            Sat: [],
+            Sun: []
+        };
+
+        schedules.forEach(schedule => {
+            if (schedule.timeSlotId && schedule.timeSlotId.dayOfWeek) {
+                organizedSchedule[schedule.timeSlotId.dayOfWeek].push({
+                    scheduleId: schedule._id,
+                    teacher: {
+                        id: schedule.teacherId?._id,
+                        name: schedule.teacherId?.name,
+                        email: schedule.teacherId?.email,
+                        phoneNumber: schedule.teacherId?.phoneNumber
+                    },
+                    subject: schedule.teacherId?.subject,
+                    timeSlot: {
+                        startTime: schedule.timeSlotId.startTime,
+                        endTime: schedule.timeSlotId.endTime,
+                        session: schedule.timeSlotId.session,
+                        period: schedule.timeSlotId.period
+                    },
+                    semester: schedule.semester
+                });
+            }
+        });
+
+        // Log activity
+        await logActivity({
+            userId: studentId,
+            role: 'student',
+            action: `Xem lịch học${semester ? ' học kỳ ' + semester : ''}`
+        });
+
+        res.status(200).json({
+            success: true,
+            class: {
+                id: schedules[0]?.classId?._id || classId,
+                class_code: schedules[0]?.classId?.class_code,
+                class_year: schedules[0]?.classId?.class_year
+            },
+            totalSchedules: schedules.length,
+            schedules: organizedSchedule
+        });
+
+    } catch (error) {
+        console.error('Lỗi khi lấy lịch học:', error);
+        res.status(500).json({
+            success: false,
+            message: "Lỗi server khi lấy lịch học",
+            error: error.message
+        });
+    }
+};
+
 module.exports = {
     registerStudent,
     loginStudent,
@@ -655,5 +749,6 @@ module.exports = {
     Ai_Daily_Generate_Question_Answer,
     DailyTestSubjectChange,
     GetDailyQuestionAnswer,
-    Ai_Auto_Grade_And_Save
+    Ai_Auto_Grade_And_Save,
+    getStudentSchedule
 };

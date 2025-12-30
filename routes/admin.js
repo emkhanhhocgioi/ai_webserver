@@ -3,6 +3,7 @@ const router = express.Router();
 const bcrypt = require('bcrypt');
 const jwt = require('jsonwebtoken');
 const Admin = require('../schema/admin_schema');
+const TimeSlot = require('../schema/time_slot_schema.js');
 const {adminVerify} = require('../midlewares/adminverify');
 const controller = require('../controller/admin_controller');
 
@@ -45,6 +46,14 @@ router.get('/test-reports/test/:testId', adminVerify, controller.getTestReportBy
 router.get('/test-reports/student/:studentId', adminVerify, controller.getStudentTestPerformance);
 router.get('/test-reports/statistics', adminVerify, controller.getOverallTestStatistics);
 
+// Class Schedule Management Routes
+router.post('/schedule/assign', adminVerify, controller.assignTeacherToTimeSlot);
+router.get('/schedule/class/:classId', adminVerify, controller.getClassSchedule);
+
+
+// Postman test route (no auth)
+
+router.get('/time_slot',adminVerify, controller.getTimeSlot);
 module.exports = router;
 
 

@@ -146,6 +146,7 @@ const Ai_auto_grade = async (req, res) => {
         console.log("Received answer text for grading:", student_answer);
         console.log("Subject for grading:", subject);
         console.log("Exercise question:", exercise_question);
+        
          const subjectmap = {
             'Toán': 'math',
             'Ngữ Văn': 'van',

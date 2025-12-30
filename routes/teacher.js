@@ -70,4 +70,12 @@ router.get('/lessons/:lessonId', teacherTokenVerify, teacherController.TeacherGe
 // Get analytics data
 router.get('/analytics/class/average-grades', teacherTokenVerify, teacherController.ClassAvarageGrades);
 router.get('/analytics/tests/performance', teacherTokenVerify, teacherController.TestsAnylytics);
+
+//Schedule routes
+router.get('/schedule', teacherTokenVerify, teacherController.getTeacherSchedule);
+
+// mail routes
+router.post('/send-email/homeroom', teacherTokenVerify, teacherController.teacherMailHomeroomClass);
+router.post('/send-email/subject/class', teacherTokenVerify, teacherController.teacherMailSubjectClass);
+
 module.exports = router;

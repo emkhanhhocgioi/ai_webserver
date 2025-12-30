@@ -1,5 +1,7 @@
 const bcrypt = require('bcrypt');
+const nodemailer = require('nodemailer');
 const jwt = require('jsonwebtoken');
+const transporter = require('../service/nodemailer');
 const Teacher = require('../schema/teacher');
 const Classes = require('../schema/class_schema');
 const ClassStudent = require('../schema/class_student');
@@ -9,6 +11,8 @@ const Test = require('../schema/test_schema');
 const Question = require('../schema/test_question');
 const TestAnswer = require('../schema/test_answer');
 const Lesson = require('../schema/class_lesson');
+const TeachingSchedule = require('../schema/teaching_schedule');
+const TimeSlot = require('../schema/time_slot_schema');
 const { uploadToCloudinary,deleteImageFromCloudinary } = require('../midlewares/upload');
 const { CreateTestNotification } = require('./notifications_controller');
 const { logActivity } = require('../service/user_activity_service');
@@ -1057,6 +1061,330 @@ const TestsAnylytics = async (req, res) => {
 
 };
 
+// Get teacher's teaching schedule
+const getTeacherSchedule = async (req, res) => {
+    try {
+        const teacherId = req.user.userId;
+        const { semester } = req.query;
+
+        // Build query
+        const query = { teacherId: teacherId };
+        if (semester) {
+            query.semester = semester;
+        }
+
+        // Get all teaching schedules for the teacher
+        const schedules = await TeachingSchedule.find(query)
+            .populate('classId', 'class_code class_year class_grade')
+            .populate('timeSlotId', 'dayOfWeek startTime endTime session period')
+            .sort({ 'timeSlotId.dayOfWeek': 1, 'timeSlotId.startTime': 1 });
+
+        if (!schedules || schedules.length === 0) {
+            return res.status(404).json({
+                success: false,
+                message: "Không tìm thấy lịch dạy"
+            });
+        }
+
+        // Get teacher's subject
+        const teacher = await Teacher.findById(teacherId).select('name subject email');
+        if (!teacher) {
+            return res.status(404).json({
+                success: false,
+                message: "Không tìm thấy thông tin giáo viên"
+            });
+        }
+
+        // Organize schedule by day of week
+        const organizedSchedule = {
+            Mon: [],
+            Tue: [],
+            Wed: [],
+            Thu: [],
+            Fri: [],
+            Sat: [],
+            Sun: []
+        };
+
+        schedules.forEach(schedule => {
+            if (schedule.timeSlotId && schedule.timeSlotId.dayOfWeek) {
+                organizedSchedule[schedule.timeSlotId.dayOfWeek].push({
+                    scheduleId: schedule._id,
+                    class: {
+                        id: schedule.classId?._id,
+                        class_code: schedule.classId?.class_code,
+                        class_year: schedule.classId?.class_year,
+                        class_grade: schedule.classId?.class_grade
+                    },
+                    subject: teacher.subject,
+                    timeSlot: {
+                        startTime: schedule.timeSlotId.startTime,
+                        endTime: schedule.timeSlotId.endTime,
+                        session: schedule.timeSlotId.session,
+                        period: schedule.timeSlotId.period
+                    },
+                    semester: schedule.semester
+                });
+            }
+        });
+
+        // Log activity
+        await logActivity({
+            userId: teacherId,
+            role: 'teacher',
+            action: `Xem lịch dạy${semester ? ' học kỳ ' + semester : ''}`
+        });
+
+        res.status(200).json({
+            success: true,
+            teacher: {
+                id: teacher._id,
+                name: teacher.name,
+                subject: teacher.subject,
+                email: teacher.email
+            },
+            totalSchedules: schedules.length,
+            schedules: organizedSchedule
+        });
+
+    } catch (error) {
+        console.error('Lỗi khi lấy lịch dạy:', error);
+        res.status(500).json({
+            success: false,
+            message: "Lỗi server khi lấy lịch dạy",
+            error: error.message
+        });
+    }
+};
+
+const teacherMailHomeroomClass = async (req, res) => {
+  try {
+    const { message, title } = req.body;
+    const teacherId = req.user.userId;
+
+    if (!title || !message) {
+      return res.status(400).json({ message: 'Vui lòng nhập tiêu đề và nội dung thư' });
+    }
+
+    // Find homeroom class
+    const homeroomClasses = await Classes.find({ class_teacher: teacherId });
+    if (!homeroomClasses || homeroomClasses.length === 0) {
+      return res.status(404).json({ message: 'Giáo viên không có lớp chủ nhiệm' });
+    }
+
+    // Get all class IDs
+    const classIds = homeroomClasses.map(cls => cls._id);
+
+    // Get all students from homeroom classes
+    const classStudents = await ClassStudent.find({ classID: { $in: classIds } })
+      .populate('studentID', 'email name');
+
+    if (!classStudents || classStudents.length === 0) {
+      return res.status(404).json({ message: 'Không tìm thấy học sinh nào trong lớp chủ nhiệm' });
+    }
+
+    // Get unique student emails
+    const studentEmails = [...new Set(
+      classStudents
+        .filter(cs => cs.studentID && cs.studentID.email)
+        .map(cs => cs.studentID.email)
+    )];
+
+    if (studentEmails.length === 0) {
+      return res.status(404).json({ message: 'Không tìm thấy email học sinh nào' });
+    }
+
+    // Get teacher info
+    const teacher = await Teacher.findById(teacherId);
+    if (!teacher) {
+      return res.status(404).json({ message: 'Không tìm thấy thông tin giáo viên' });
+    }
+
+    // Send email to all students
+    const mailOptions = {
+      from: process.env.EMAIL_USER,
+      to: studentEmails.join(','),
+      subject: title,
+      html: `
+        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+          <h2 style="color: #333;">${title}</h2>
+          <p style="color: #666; line-height: 1.6;">${message}</p>
+          <hr style="border: 1px solid #eee; margin: 20px 0;">
+          <p style="color: #999; font-size: 12px;">
+            Gửi từ: ${teacher.name} (Giáo viên chủ nhiệm)<br>
+            Email: ${teacher.email}<br>
+            Lớp: ${homeroomClasses.map(c => c.class_code).join(', ')}
+          </p>
+        </div>
+      `
+    };
+
+    await transporter.sendMail(mailOptions);
+
+    // Log activity
+    await logActivity({
+      userId: teacherId,
+      role: 'teacher',
+      action: `Gửi thư chủ nhiệm đến ${studentEmails.length} học sinh: "${title}"`
+    });
+
+    res.status(200).json({ 
+      message: 'Gửi thư thành công',
+      sentTo: studentEmails.length,
+      classes: homeroomClasses.map(c => c.class_code),
+      students: studentEmails
+    });
+
+  } catch (error) {
+    console.error('Lỗi khi gửi email cho lớp chủ nhiệm của giáo viên:', error);
+    res.status(500).json({ message: 'Đã xảy ra lỗi khi gửi thư' });
+  }
+}
+// Subject Class Mailing Service 
+const teacherMailSubjectClass = async (req, res) => {
+  try {
+    const { message, title } = req.body;
+    const teacherId = req.user.userId;
+
+    if (!title || !message) {
+      return res.status(400).json({ message: 'Vui lòng nhập tiêu đề và nội dung thư' });
+    }
+
+    // Find all classes where this teacher teaches any subject
+    const subjectClasses = await SubjectClass.find({ 
+      $or: [
+        { toan: teacherId },
+        { ngu_van: teacherId },
+        { tieng_anh: teacherId },
+        { vat_ly: teacherId },
+        { hoa_hoc: teacherId },
+        { sinh_hoc: teacherId },
+        { lich_su: teacherId }, 
+        { dia_ly: teacherId },
+        { giao_duc_cong_dan: teacherId },
+        { cong_nghe: teacherId },
+        { tin_hoc: teacherId },
+        { the_duc: teacherId },
+        { am_nhac: teacherId },
+        { my_thuat: teacherId }
+      ]
+    }).populate('classid');
+
+    if (!subjectClasses || subjectClasses.length === 0) {
+      return res.status(404).json({ message: 'Không tìm thấy lớp học nào' });
+    }
+
+    // Get all unique student emails
+    const studentEmails = new Set();
+    for (const subjectClass of subjectClasses) {
+      if (!subjectClass.classid) continue;
+      
+      const classStudents = await ClassStudent.find({ classID: subjectClass.classid._id })
+        .populate('studentID', 'email name');
+      
+      classStudents.forEach(cs => {
+        if (cs.studentID && cs.studentID.email) {
+          studentEmails.add(cs.studentID.email);
+        }
+      });
+    }
+
+    const emailArray = Array.from(studentEmails);
+
+    if (emailArray.length === 0) {
+      return res.status(404).json({ message: 'Không tìm thấy email học sinh nào' });
+    }
+
+    // Get teacher info
+    const teacher = await Teacher.findById(teacherId);
+    if (!teacher) {
+      return res.status(404).json({ message: 'Không tìm thấy thông tin giáo viên' });
+    }
+
+    // Send email to all students
+    const mailOptions = {
+      from: process.env.EMAIL_USER,
+      to: emailArray.join(','),
+      subject: title,
+      html: `
+        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+          <h2 style="color: #333;">${title}</h2>
+          <p style="color: #666; line-height: 1.6;">${message}</p>
+          <hr style="border: 1px solid #eee; margin: 20px 0;">
+          <p style="color: #999; font-size: 12px;">
+            Gửi từ: ${teacher.name} (Giáo viên môn ${teacher.subject})<br>
+            Email: ${teacher.email}
+          </p>
+        </div>
+      `
+    };
+
+    await transporter.sendMail(mailOptions);
+
+    // Log activity
+    await logActivity({
+      userId: teacherId,
+      role: 'teacher',
+      action: `Gửi thư đến ${emailArray.length} học sinh: "${title}"`
+    });
+
+    res.status(200).json({ 
+      message: 'Gửi thư thành công',
+      sentTo: emailArray.length,
+      students: emailArray
+    });
+
+  } catch (error) {
+    console.error('Lỗi khi gửi email cho lớp học môn của giáo viên:', error);
+    res.status(500).json({ message: 'Đã xảy ra lỗi khi gửi thư' });
+  }
+}
+
+const teacherMailToStudent = async (req, res) => {
+  try {
+    const { studentEmail, title, message } = req.body;
+    const teacherId = req.user.userId;
+    if (!studentEmail || !title || !message) {
+      return res.status(400).json({ message: 'Vui lòng nhập email học sinh, tiêu đề và nội dung thư' });
+    }
+    // Get teacher info
+    const teacher = await Teacher.findById(teacherId);
+    if (!teacher) {
+      return res.status(404).json({ message: 'Không tìm thấy thông tin giáo viên' });
+    }
+    // Send email to the student
+    const mailOptions = {
+      from: process.env.EMAIL_USER,
+      to: studentEmail, 
+      subject: title,
+      html: `
+        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+          <h2 style="color: #333;">${title}</h2>  
+          <p style="color: #666; line-height: 1.6;">${message}</p>
+          <hr style="border: 1px solid #eee; margin: 20px 0;">
+          <p style="color: #999; font-size: 12px;">
+            Gửi từ: ${teacher.name} (Giáo viên môn ${teacher.subject})<br>
+            Email: ${teacher.email}
+          </p>
+        </div>
+      `
+    };
+    await transporter.sendMail(mailOptions);
+    // Log activity
+    await logActivity({
+      userId: teacherId,
+      role: 'teacher',
+      action: `Gửi thư đến học sinh ${studentEmail}: "${title}"`
+    });
+    res.status(200).json({ 
+      message: 'Gửi thư thành công',
+      sentTo: studentEmail
+    });
+  } catch (error) {
+    console.error('Lỗi khi gửi email cho học sinh:', error);
+    res.status(500).json({ message: 'Đã xảy ra lỗi khi gửi thư' });
+  }
+}
 module.exports = {
   register,
   login,
@@ -1080,4 +1408,8 @@ module.exports = {
   TeacherGetLessonsById,
   ClassAvarageGrades,
   TestsAnylytics,
+  getTeacherSchedule,
+  teacherMailSubjectClass,
+  teacherMailHomeroomClass,
+  teacherMailToStudent 
 };
