@@ -52,4 +52,8 @@ router.get('/teachers/contact', studentController.TeacherContact);
 // Schedule routes
 router.get('/schedule', verifyStudentToken, studentController.getStudentSchedule);
 
+// Account settings routes
+router.put('/settings/account', verifyStudentToken, studentController.updateAccountSettings);
+router.put('/settings/change-password', verifyStudentToken, studentController.changePassword);
+
 module.exports = router;

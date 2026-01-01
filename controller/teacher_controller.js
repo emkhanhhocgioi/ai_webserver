@@ -425,6 +425,7 @@ const TeacherGradingAsnwer = async (req, res) => {
       return res.status(404).json({ message: 'Câu trả lời không tồn tại' });
     }
     
+    console.log(req);
     // Log activity
     const teacherId = req.user.userId;
     await logActivity({

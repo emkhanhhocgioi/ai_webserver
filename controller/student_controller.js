@@ -408,6 +408,12 @@ const getAllSubjectsGrade = async (req, res) => {
     try {
         const studentId = req.user.userId;
         
+        // Hàm chuẩn hóa tên môn học
+        const normalizeSubject = (subject) => {
+            if (!subject) return 'unknown';
+            return subject.trim().toLowerCase();
+        };
+        
         // Lấy lớp của học sinh để biết các môn có trong lớp
         const classStudent = await ClassStudent.findOne({ studentID: studentId });
         if (!classStudent) {
@@ -415,38 +421,77 @@ const getAllSubjectsGrade = async (req, res) => {
         }
 
         // Lấy tất cả câu trả lời đã nộp và đã chấm
-        const answers = await TestAnswer.find({ studentID: studentId, submit: true, isgraded: true })
+        const answers = await TestAnswer.find({ 
+            studentID: studentId, 
+            submit: true, 
+            isgraded: true 
+        })
             .select('teacherGrade')
             .populate('testID', 'subject');
 
-        // Tính tổng và số lượng cho mỗi môn
+        // Tính tổng và số lượng cho mỗi môn (dùng key chuẩn hóa)
         const gradeMap = {};
         answers.forEach(answer => {
             const subject = answer.testID && answer.testID.subject ? answer.testID.subject : 'Unknown';
-            if (!gradeMap[subject]) {
-                gradeMap[subject] = { totalGrade: 0, count: 0 };
+            const normalizedKey = normalizeSubject(subject);
+            
+            if (!gradeMap[normalizedKey]) {
+                gradeMap[normalizedKey] = { 
+                    originalName: subject, // Giữ tên gốc để hiển thị
+                    totalGrade: 0, 
+                    count: 0 
+                };
             }
-            const gradeValue = typeof answer.teacherGrade === 'number' ? answer.teacherGrade : Number(answer.teacherGrade) || 0;
-            gradeMap[subject].totalGrade += gradeValue;
-            gradeMap[subject].count += 1;
+            
+            const gradeValue = typeof answer.teacherGrade === 'number' 
+                ? answer.teacherGrade 
+                : Number(answer.teacherGrade) || 0;
+                
+            gradeMap[normalizedKey].totalGrade += gradeValue;
+            gradeMap[normalizedKey].count += 1;
         });
 
-        // Lấy danh sách tất cả môn hiện có trong lớp (đảm bảo trả về 0 nếu không có điểm)
-        const subjects = await TestScheme.distinct('subject', { classID: classStudent.classID });
+        // Lấy danh sách tất cả môn hiện có trong lớp
+        const subjectsRaw = await TestScheme.distinct('subject', { classID: classStudent.classID });
+        
+        // Loại bỏ trùng lặp bằng cách chuẩn hóa
+        const subjectMap = new Map();
+        subjectsRaw.forEach(subject => {
+            const normalizedKey = normalizeSubject(subject);
+            // Chỉ lưu lần đầu tiên gặp (hoặc có thể ưu tiên tên có dấu)
+            if (!subjectMap.has(normalizedKey)) {
+                subjectMap.set(normalizedKey, subject);
+            } else {
+                // Ưu tiên tên có độ dài dài hơn (thường là có dấu đầy đủ)
+                const existing = subjectMap.get(normalizedKey);
+                if (subject.length > existing.length) {
+                    subjectMap.set(normalizedKey, subject);
+                }
+            }
+        });
 
-        const grades = subjects.map(subject => {
-            if (gradeMap[subject] && gradeMap[subject].count > 0) {
+        // Tạo danh sách môn học unique
+        const uniqueSubjects = Array.from(subjectMap.keys());
+
+        // Tính điểm trung bình cho mỗi môn
+        const grades = uniqueSubjects.map(normalizedKey => {
+            const displayName = subjectMap.get(normalizedKey);
+            
+            if (gradeMap[normalizedKey] && gradeMap[normalizedKey].count > 0) {
                 return {
-                    subject,
-                    averageGrade: gradeMap[subject].totalGrade / gradeMap[subject].count
+                    subject: gradeMap[normalizedKey].originalName || displayName,
+                    averageGrade: Math.round((gradeMap[normalizedKey].totalGrade / gradeMap[normalizedKey].count) * 100) / 100
                 };
             } else {
                 return {
-                    subject,
+                    subject: displayName,
                     averageGrade: 0
                 };
             }
         });
+
+        // Sắp xếp theo tên môn học
+        grades.sort((a, b) => a.subject.localeCompare(b.subject, 'vi'));
 
         console.log("Calculated Grades:", grades);
 
@@ -454,10 +499,9 @@ const getAllSubjectsGrade = async (req, res) => {
         
     } catch (error) {
         console.error('Lỗi lấy điểm học sinh:', error);
-        res.status(500).json({ message: "Lỗi server" });
+        res.status(500).json({ message: "Lỗi server", error: error.message });
     }
 };
-
 
 // Function lấy tất cả thông tin học sinh (không bao gồm password)
 const getAllStudents = async (req, res) => {
@@ -732,6 +776,107 @@ const getStudentSchedule = async (req, res) => {
     }
 };
 
+
+// Student account settings
+const updateAccountSettings = async (req, res) => {
+    try {
+        const studentId = req.user.userId;
+        const { notifications, darkMode, TestReminder } = req.body;
+        console.log("Updating account settings for student ID:", studentId);
+        console.log("New settings:", { notifications, darkMode, TestReminder });
+
+        const student = await Student.findById(studentId);
+        if (!student) {
+            return res.status(404).json({ message: 'Học sinh không tồn tại' });
+        }
+
+        // Initialize accountSettings if it doesn't exist
+        if (!student.accountSettings) {
+            student.accountSettings = {
+                notifications: true,
+                darkMode: false,
+                TestReminder: true
+            };
+        }
+
+        // Update account settings
+        if (notifications !== undefined) {
+            student.accountSettings.notifications = notifications;
+        }
+        if (darkMode !== undefined) {
+            student.accountSettings.darkMode = darkMode;
+        }
+        if (TestReminder !== undefined) {
+            student.accountSettings.TestReminder = TestReminder;
+        }
+
+        await student.save();
+
+        // Log activity
+        await logActivity({
+            userId: studentId,
+            role: 'student',
+            action: 'Cập nhật cài đặt tài khoản'
+        });
+
+        res.status(200).json({
+            message: 'Cập nhật cài đặt thành công',
+            accountSettings: student.accountSettings
+        });
+    } catch (error) {
+        console.error('Lỗi cập nhật cài đặt:', error);
+        res.status(500).json({ message: 'Lỗi server' });
+    }
+}
+
+// Change password
+const changePassword = async (req, res) => {
+    try {
+        const studentId = req.user.userId;
+        const { currentPassword, newPassword } = req.body;
+
+        // Validate input
+        if (!currentPassword || !newPassword) {
+            return res.status(400).json({ message: 'Vui lòng nhập đầy đủ thông tin' });
+        }
+
+        if (newPassword.length < 6) {
+            return res.status(400).json({ message: 'Mật khẩu mới phải có ít nhất 6 ký tự' });
+        }
+
+        const student = await Student.findById(studentId);
+        if (!student) {
+            return res.status(404).json({ message: 'Học sinh không tồn tại' });
+        }
+
+        // Verify current password
+        const validPassword = await bcrypt.compare(currentPassword, student.password);
+        if (!validPassword) {
+            return res.status(400).json({ message: 'Mật khẩu hiện tại không đúng' });
+        }
+
+        // Hash new password
+        const salt = await bcrypt.genSalt(10);
+        const hashedPassword = await bcrypt.hash(newPassword, salt);
+
+        // Update password
+        student.password = hashedPassword;
+        await student.save();
+
+        // Log activity
+        await logActivity({
+            userId: studentId,
+            role: 'student',
+            action: 'Thay đổi mật khẩu'
+        });
+
+        res.status(200).json({ message: 'Đổi mật khẩu thành công' });
+    } catch (error) {
+        console.error('Lỗi đổi mật khẩu:', error);
+        res.status(500).json({ message: 'Lỗi server' });
+    }
+}
+
 module.exports = {
     registerStudent,
     loginStudent,
@@ -750,5 +895,7 @@ module.exports = {
     DailyTestSubjectChange,
     GetDailyQuestionAnswer,
     Ai_Auto_Grade_And_Save,
-    getStudentSchedule
+    getStudentSchedule,
+    updateAccountSettings,
+    changePassword
 };

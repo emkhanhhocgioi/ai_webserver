@@ -48,8 +48,8 @@ router.post('/tests/generate', teacherTokenVerify, AI_controller.Ai_Generate_Que
 router.get('/tests/:testId', teacherTokenVerify, teacherController.GetTestDetailById);
 router.delete('/tests/:testId', teacherTokenVerify, teacherController.DeleteTestById);
 router.put('/tests/:testId', teacherTokenVerify, teacherController.EditTestById);
-router.get('/tests/:testId/submitted-answers', teacherController.getSubmittedAnswers);
-router.put('/tests/answers/:answerId/grade', teacherController.TeacherGradingAsnwer);   
+router.get('/tests/:testId/submitted-answers', teacherTokenVerify, teacherController.getSubmittedAnswers);
+router.put('/tests/answers/:answerId/grade', teacherTokenVerify, teacherController.TeacherGradingAsnwer);   
 
 // Teacher question management route
 router.post('/tests/:testId/questions', teacherTokenVerify, upload.array('files'), teacherController.CreateQuestions);

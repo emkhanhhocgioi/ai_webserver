@@ -51,7 +51,21 @@ const studentSchema = new Schema ({
       type: Date,
       default: Date.now
     }
-  }]
+  }],
+  accountSettings: {
+    notifications: {
+      type: Boolean,
+      default: true
+    },
+    darkMode: {
+      type: Boolean,
+      default: false
+    },
+    TestReminder: {
+      type: Boolean,
+      default: true
+    }
+  }
  
 },{ timestamps: true })
 

@@ -345,7 +345,7 @@ const AdminCreateClass = async (req, res) => {
         });
         await newSubjectTeacher.save();
         const TeacherInCharge = await Teacher.findByIdAndUpdate(teacher_id, { 
-            $push: { isClassTeacher: true } }
+            $set: { isClassTeacher: true } }
         );
         
         if (!TeacherInCharge) {
@@ -368,30 +368,74 @@ const AdminCreateClass = async (req, res) => {
         });
     }
 };
+const mongoose = require("mongoose");
+
 const adminDeleteClassByID = async (req, res) => {
+    const session = await mongoose.startSession();
+    session.startTransaction();
+
     try {
         const classId = req.params.id;
-        const deletedClass = await Class.findByIdAndDelete(classId);    
+
+        // 1. Xóa lớp
+        const deletedClass = await Class.findByIdAndDelete(classId, { session });
         if (!deletedClass) {
+            await session.abortTransaction();
+            session.endSession();
             return res.status(404).json({
                 success: false,
                 message: "Lớp học không tồn tại"
             });
-        }   
-        res.status(200).json({
+        }
+
+        // 2. Xóa học sinh trong lớp
+        await Class_student.deleteMany(
+            { classID: classId },
+            { session }
+        );
+
+        // 3. Xóa phân công môn học
+        await Subject_Teacher.deleteMany(
+            { classid: classId },
+            { session }
+        );
+
+        // 4. Cập nhật giáo viên chủ nhiệm
+        if (deletedClass.class_teacher) {
+            const teacherUpdate = await Teacher.findByIdAndUpdate(
+                deletedClass.class_teacher,
+                { $set: { isClassTeacher: false } },
+                { session }
+            );
+
+            if (!teacherUpdate) {
+                throw new Error("Không tìm thấy giáo viên chủ nhiệm");
+            }
+        }
+
+        // ✅ Nếu TẤT CẢ thành công → commit
+        await session.commitTransaction();
+        session.endSession();
+
+        return res.status(200).json({
             success: true,
-            message: "Xóa lớp học thành công"   
+            message: "Xóa lớp học thành công"
         });
-    }
-    catch (error) {
-        console.error('Lỗi khi xóa lớp học theo ID:', error);  
-        res.status(500).json({  
+
+    } catch (error) {
+        // ❌ Nếu có lỗi → rollback toàn bộ
+        await session.abortTransaction();
+        session.endSession();
+
+        console.error("Lỗi khi xóa lớp học:", error);
+        return res.status(500).json({
             success: false,
             message: "Lỗi server",
-            error: error.message 
+            error: error.message
         });
-    }   
+    }
 };
+
 const AdminUpdateClassByID = async (req, res) => {
     try {
         const classId = req.params.id;
