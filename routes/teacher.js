@@ -70,6 +70,9 @@ router.get('/lessons/:lessonId', teacherTokenVerify, teacherController.TeacherGe
 // Get analytics data
 router.get('/analytics/class/average-grades', teacherTokenVerify, teacherController.ClassAvarageGrades);
 router.get('/analytics/tests/performance', teacherTokenVerify, teacherController.TestsAnylytics);
+router.get('/analytics/student/average-grade', teacherTokenVerify, teacherController.getStudentAverageGradeBySubject);
+router.get('/analytics/class/students/all-subjects-average', teacherTokenVerify, teacherController.getClassStudentsAllSubjectsAverage);
+router.post('/analytics/class/update-average-grades', teacherTokenVerify, teacherController.updateClassStudentsAverageGrade);
 
 //Schedule routes
 router.get('/schedule', teacherTokenVerify, teacherController.getTeacherSchedule);

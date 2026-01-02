@@ -284,7 +284,8 @@ const getStudentClassTest = async (req, res) => {
             return {
                 ...test,
                 isSubmited: !!(isubmited && isubmited.submit),
-                isSubmitedTime: isubmited && isubmited.submitTime ? isubmited.submitTime : null
+                isSubmitedTime: isubmited && isubmited.submitTime ? isubmited.submitTime : null,
+                isGraded: isubmited && isubmited.isgraded ? isubmited.isgraded : false
             };
         }));
 

@@ -3,7 +3,7 @@ const Student = require('../schema/student');
 const ClassStudent = require('../schema/class_student');
 const bcrypt = require('bcrypt');
 
-const classId = '69569d86d293a8b5627c9236';
+const classId = "692edfa9e6b9f09347d6b98c";
 
 const studentNames = [
   'Nguyễn Văn An', 'Trần Thị Bình', 'Lê Hoàng Châu', 'Phạm Thị Dung',

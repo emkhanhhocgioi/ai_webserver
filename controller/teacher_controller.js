@@ -540,56 +540,111 @@ const CreateQuestion = async (req, res) => {
 const CreateQuestions = async (req, res) => {
   try {
     const { testId } = req.params;
-    const questionsData = req.body.questions; // Mảng các câu hỏi 
-    const createdQuestions = [];
-    const files = req.files || []; // Array of uploaded files
 
-    // Kiểm tra xem bài test có tồn tại không
+    // Handle both array and object with questions property
+    let questionsData;
+    if (Array.isArray(req.body)) {
+      questionsData = req.body;
+    } else if (req.body.questions) {
+      // Parse if it's a string, otherwise use as-is
+      questionsData = typeof req.body.questions === 'string' 
+        ? JSON.parse(req.body.questions) 
+        : req.body.questions;
+    } else {
+      return res.status(400).json({ message: 'Dữ liệu câu hỏi không hợp lệ' });
+    }
+
+    console.log('questionsData parsed:', questionsData);
+    console.log('Number of questions:', questionsData.length);
+    
+    const createdQuestions = [];
+    const files = req.files || [];
+
+    // Kiểm tra bài test tồn tại
     const test = await Test.findById(testId);
     if (!test) {
+      console.error('❌ Test không tồn tại:', testId);
       return res.status(404).json({ message: 'Bài kiểm tra không tồn tại' });
     }
-    
+
     for (let i = 0; i < questionsData.length; i++) {
       const questionData = questionsData[i];
-      const { difficult, question, questionType, grade, solution, options } = questionData;
-      let metadata = questionData.metadata;
-      
-      // Check if there's a corresponding file for this question
-      const fileForQuestion = files.find(f => f.fieldname === `file_${i}`);
-      
+      console.log(`\n🟡 [QUESTION ${i + 1}] Dữ liệu ban đầu:`, questionData);
+
+      const {
+        difficult,
+        question,
+        questionType,
+        subjectQuestionType,
+        grade,
+        solution,
+        options
+      } = questionData;
+
+      let metadata = questionData.metadata || null;
+
+      // Tìm file tương ứng với câu hỏi
+      const fileForQuestion = files.find(
+        f => f.fieldname === `file_${i}`
+      );
+
       if (fileForQuestion) {
+        console.log(`🟡 [QUESTION ${i + 1}] Có file upload:`, {
+          filename: fileForQuestion.originalname,
+          size: fileForQuestion.size
+        });
+
         try {
-          const uploadResult = await uploadToCloudinary(fileForQuestion.buffer, fileForQuestion.originalname);
+          const uploadResult = await uploadToCloudinary(
+            fileForQuestion.buffer,
+            fileForQuestion.originalname
+          );
           metadata = uploadResult.secure_url;
+
+          console.log(`🟢 [QUESTION ${i + 1}] Upload thành công:`, metadata);
         } catch (uploadError) {
-          console.error('Lỗi khi upload ảnh:', uploadError);
-          metadata = questionData.metadata || null;
+          console.error(`🔴 [QUESTION ${i + 1}] Lỗi upload ảnh:`, uploadError);
         }
+      } else {
+        console.log(`⚪ [QUESTION ${i + 1}] Không có file upload`);
       }
-      
+
       const newQuestion = new Question({
         testid: testId,
         difficult,
         question,
         questionType,
-        grade,  
+        subjectQuestionType,
+        grade,
         solution,
         metadata,
         options
       });
+
+      console.log(`🟡 [QUESTION ${i + 1}] Trước khi save DB`);
+
       await newQuestion.save();
+
+      console.log(`🟢 [QUESTION ${i + 1}] Đã lưu DB với ID:`, newQuestion._id);
+
       createdQuestions.push(newQuestion);
     }
-    res.status(201).json({ 
-      message: 'Các câu hỏi được tạo thành công', 
-      questions: createdQuestions 
+
+    console.log('✅ Tạo câu hỏi hoàn tất');
+
+    res.status(201).json({
+      message: 'Các câu hỏi được tạo thành công',
+      questions: createdQuestions
     });
+
   } catch (error) {
-    res.status(500).json({ message: 'Đã xảy ra lỗi khi tạo các câu hỏi' });
-    console.error('Lỗi khi tạo các câu hỏi:', error);
+    console.error('🔥 Lỗi tổng khi tạo câu hỏi:', error);
+    res.status(500).json({
+      message: 'Đã xảy ra lỗi khi tạo các câu hỏi'
+    });
   }
 };
+
 const DeleteQuestion = async (req, res) => {
   try {
     const { questionId } = req.params;
@@ -1386,6 +1441,173 @@ const teacherMailToStudent = async (req, res) => {
     res.status(500).json({ message: 'Đã xảy ra lỗi khi gửi thư' });
   }
 }
+
+// Get student average grade by subject
+const getStudentAverageGradeBySubject = async (req, res) => {
+  try {
+    const { studentId, subject } = req.query;
+    
+    if (!studentId || !subject) {
+      return res.status(400).json({ message: 'studentId and subject are required' });
+    }
+    
+    const { getStudentAvarageSubjectGrade } = require('./answer_controller');
+    const averageGrade = await getStudentAvarageSubjectGrade(studentId, subject);
+    
+    res.status(200).json({ 
+      message: 'Average grade retrieved successfully',
+      studentId,
+      subject,
+      averageGrade 
+    });
+  } catch (error) {
+    console.error('Error getting student average grade:', error);
+    res.status(500).json({ message: 'Error getting student average grade: ' + error.message });
+  }
+};
+
+// Update all students' average grades in a class for a subject
+const updateClassStudentsAverageGrade = async (req, res) => {
+  try {
+    const { classId, subject } = req.body;
+    
+    if (!classId || !subject) {
+      return res.status(400).json({ message: 'classId and subject are required' });
+    }
+    
+    const { updateAllStudentsAverageGrade } = require('./answer_controller');
+    await updateAllStudentsAverageGrade(classId, subject);
+    
+    // Log activity
+    const teacherId = req.user.userId;
+    await logActivity({
+      userId: teacherId,
+      role: 'teacher',
+      action: `Cập nhật điểm trung bình môn ${subject} cho lớp ${classId}`
+    });
+    
+    res.status(200).json({ 
+      message: 'All students average grades updated successfully',
+      classId,
+      subject
+    });
+  } catch (error) {
+    console.error('Error updating students average grades:', error);
+    res.status(500).json({ message: 'Error updating students average grades: ' + error.message });
+  }
+};
+
+
+const getClassStudentsAllSubjectsAverage = async (req, res) => {
+  try {
+    const { classId } = req.query;
+    
+    if (!classId) {
+      return res.status(400).json({ message: 'classId is required' });
+    }
+
+    // Get all students in the class
+    const classStudents = await ClassStudent.find({ classID: classId })
+      .populate('studentID', 'name _id')
+      .lean();
+    
+    if (!classStudents || classStudents.length === 0) {
+      return res.status(404).json({ message: 'No students found in this class' });
+    }
+
+    const studentIds = classStudents.map(cs => cs.studentID._id);
+
+    // Use aggregation to get all graded answers with test info
+    const gradedAnswers = await TestAnswer.aggregate([
+      {
+        $match: {
+          studentID: { $in: studentIds },
+          isgraded: true
+        }
+      },
+      {
+        $lookup: {
+          from: 'tests',
+          localField: 'testID',
+          foreignField: '_id',
+          as: 'test'
+        }
+      },
+      {
+        $unwind: '$test'
+      },
+      {
+        $project: {
+          studentID: 1,
+          subject: '$test.subject',
+          grade: {
+            $ifNull: ['$teacherGrade', '$AIGrade']
+          }
+        }
+      },
+      {
+        $match: {
+          grade: { $ne: null }
+        }
+      }
+    ]);
+
+    // Build result for each student
+    const results = classStudents.map(cs => {
+      const student = cs.studentID;
+      const studentAnswers = gradedAnswers.filter(
+        ans => ans.studentID.toString() === student._id.toString()
+      );
+
+      // Group by subject
+      const subjectMap = {};
+      
+      for (const answer of studentAnswers) {
+        const subject = answer.subject;
+        if (!subjectMap[subject]) {
+          subjectMap[subject] = [];
+        }
+        subjectMap[subject].push(answer.grade);
+      }
+
+      // Calculate averages per subject
+      const subjects = [];
+      let totalScore = 0;
+      let subjectCount = 0;
+
+      for (const [subjectName, grades] of Object.entries(subjectMap)) {
+        const avg = grades.reduce((a, b) => a + b, 0) / grades.length;
+        subjects.push({
+          subjectName,
+          averageScore: Math.round(avg * 100) / 100 // Round to 2 decimal places
+        });
+        totalScore += avg;
+        subjectCount++;
+      }
+
+      const overallAverage = subjectCount > 0
+        ? Math.round((totalScore / subjectCount) * 100) / 100
+        : "Chưa có";
+
+      return {
+        studentId: student._id,
+        studentName: student.name,
+        subjects: subjects.length > 0 ? subjects : [],
+        overallAverage
+      };
+    });
+
+    res.status(200).json({
+      message: 'Class students average grades retrieved successfully',
+      data: results
+    });
+
+  } catch (error) {
+    console.error('Error getting class students average grades:', error);
+    res.status(500).json({ message: 'Error retrieving class students average grades: ' + error.message });
+  }
+};
+
 module.exports = {
   register,
   login,
@@ -1412,5 +1634,8 @@ module.exports = {
   getTeacherSchedule,
   teacherMailSubjectClass,
   teacherMailHomeroomClass,
-  teacherMailToStudent 
+  teacherMailToStudent,
+  getStudentAverageGradeBySubject,
+  updateClassStudentsAverageGrade,
+  getClassStudentsAllSubjectsAverage
 };

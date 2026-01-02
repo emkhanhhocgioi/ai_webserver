@@ -68,7 +68,7 @@ const GetAnswerStatus = async (studentid, testid) => {
         if (!answerDoc) {
             return { status: false, submit: false, submitTime: null };
         }
-        return {submit: answerDoc.submit, submitTime: answerDoc.submissionTime };
+        return {submit: answerDoc.submit, submitTime: answerDoc.submissionTime  , isgraded:answerDoc.isgraded };
     } catch (error) {
         console.error('Error getting answer status:', error);
         throw new Error('Error getting answer status: ' + error.message);
@@ -245,4 +245,39 @@ const editAnswer = async (req, res) => {
     }
 };
 
-module.exports = { StartTest, addAnsweredQuestion, GetAnswerStatus, FileUploadToQuestion, editUploadQuestion, editAnswer };
+const getStudentAvarageSubjectGrade = async (studentId, subject) => {
+    try {
+        const answers = await Answer.find({ studentID: studentId }).populate('testID');
+        let totalGrade = 0;
+        let count = 0;
+        for (const answer of answers) {
+            if (answer.isgraded && answer.testID.subject === subject) {
+                totalGrade += answer.grade;
+                count++;
+            }
+        }
+        if (count === 0) return 0;
+        return totalGrade / count;
+    }
+    catch (error) {
+        console.error('Error calculating average grade:', error);
+        throw new Error('Error calculating average grade: ' + error.message);
+    }
+};
+const updateAllStudentsAverageGrade = async (classId, subject) => {
+    try {
+        const students = await Student.find({  classid: classId });
+        for (const student of students) {
+            const avgGrade = await getStudentAvarageSubjectGrade(student._id, subject);
+            student.averageGrades = student.averageGrades || {};
+            student.averageGrades[subject] = avgGrade;
+            await student.save();
+        }   
+    } catch (error) {
+        console.error('Error updating students average grades:', error);
+        throw new Error('Error updating students average grades: ' + error.message);
+    }
+};
+
+
+module.exports = { StartTest, addAnsweredQuestion, GetAnswerStatus, FileUploadToQuestion, editUploadQuestion, editAnswer, updateAllStudentsAverageGrade , getStudentAvarageSubjectGrade };
