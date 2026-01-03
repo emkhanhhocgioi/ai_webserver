@@ -2,6 +2,7 @@ const router = require('express').Router();
 const teacherController = require('../controller/teacher_controller');
 const answerController = require('../controller/answer_controller');
 const AI_controller = require('../controller/AI_controller');
+const studentController = require('../controller/student_controller');
 const { teacherTokenVerify } = require('../midlewares/teacherverify');
 const multer = require('multer');
 
@@ -36,9 +37,12 @@ router.post('/ai/auto-grading/file', teacherTokenVerify, AI_controller.Ai_Auto_G
 router.post('/ai/auto-grading/image', teacherTokenVerify, AI_controller.AI_Auto_Grading_from_image);
 
 
-// Teacher class management route
+// Teacher class and student management route
 router.get('/class', teacherTokenVerify, teacherController.TeacherGetClass);
 router.get('/class/subjects', teacherTokenVerify, teacherController.TeacherGetSubjectClass);
+// Student
+router.patch('/students/:studentId', teacherTokenVerify, studentController.updateStudentConductAndPerformance);
+
 
 
 // Teacher test management route

@@ -1,6 +1,7 @@
 const bcrypt = require('bcrypt');
 const nodemailer = require('nodemailer');
 const jwt = require('jsonwebtoken');
+const mongoose = require('mongoose');
 const transporter = require('../service/nodemailer');
 const Teacher = require('../schema/teacher');
 const Classes = require('../schema/class_schema');
@@ -188,14 +189,26 @@ const TeacherGetSubjectClass = async (req, res) => {
         { $group: { _id: "$classID", count: { $sum: 1 } } }
       ])
       : [];
+    
+    const TestCount = classIds.length ?
+      await Test.aggregate([
+        { $match: { classID: { $in: classIds }, teacherID: new mongoose.Types.ObjectId(teacherId) } },
+        { $group: { _id: "$classID", count: { $sum: 1 } } }
+      ])
+      : [];
+
+    console.log("Student Counts:", studentCounts);
+    console.log("Test Counts:", TestCount);
 
     // Attach studentCount to each classDoc
     classDocs = classDocs.map(cd => {
       const cid = cd.classid ? (cd.classid._id || cd.classid) : null;
       const sc = studentCounts.find(s => s._id && cid && s._id.toString() === cid.toString());
+      const tc = TestCount.find(t => t._id && cid && t._id.toString() === cid.toString());
       return {
       ...cd.toObject(),
-      studentCount: sc ? sc.count : 0
+      studentCount: sc ? sc.count : 0,
+      testCount: tc ? tc.count : 0
       };
     });
 
@@ -235,6 +248,7 @@ const TeacherGetSubjectClass = async (req, res) => {
         class_code: classDoc.classid?.class_code,
         class_year: classDoc.classid?.class_year,
         studentCount: classDoc.studentCount || 0,
+        testCount: classDoc.testCount || 0,
         subjects: subjects
       };
     });
@@ -843,17 +857,33 @@ const TeacherGetLessonsById= async (req, res) => {
 const DeleteLessonById = async (req, res) => {
   try {
     const { lessonId } = req.params;
-    const deletedLesson = await Lesson.findByIdAndDelete(lessonId);
-    if (!deletedLesson) { 
+    if (!lessonId) {
+      return res.status(400).json({ message: 'Lesson ID is required' });
+    }
+    
+    // First, find the lesson to get its metadata
+    const lesson = await Lesson.findById(lessonId);
+    if (!lesson) { 
       return res.status(404).json({ message: 'Lesson not found' }); 
     }
+    
+    // Delete file from Cloudinary if metadata exists
+    if (lesson.lessonMetadata) {
+      const response = await deleteImageFromCloudinary(lesson.lessonMetadata);
+      if (response) {
+        console.log('Lesson file deleted successfully from Cloudinary');
+      }
+    }
+    
+    // Delete the lesson from database
+    await Lesson.findByIdAndDelete(lessonId);
     
     // Log activity
     const teacherId = req.user.userId;
     await logActivity({
       userId: teacherId,
       role: 'teacher',
-      action: `Xóa bài học: "${deletedLesson.title}"`,
+      action: `Xóa bài học: "${lesson.title}"`,
       lessonId: lessonId
     });
     
@@ -1607,6 +1637,7 @@ const getClassStudentsAllSubjectsAverage = async (req, res) => {
     res.status(500).json({ message: 'Error retrieving class students average grades: ' + error.message });
   }
 };
+
 
 module.exports = {
   register,

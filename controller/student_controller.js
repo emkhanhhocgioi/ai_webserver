@@ -878,6 +878,76 @@ const changePassword = async (req, res) => {
     }
 }
 
+const updateStudentConductAndPerformance = async (req, res) => {
+    try {
+        const studentId = req.params.studentId;
+        console.log("Received request to update conduct and performance:", req.body);
+        console.log("Student ID:", studentId);
+        
+        const { conduct, performance } = req.body;
+        
+        // Validate input
+        if (!conduct && !performance) {
+            return res.status(400).json({ 
+                message: 'Vui lòng cung cấp ít nhất một trường để cập nhật (hạnh kiểm hoặc học lực)' 
+            });
+        }
+        
+        // Build update object
+        const updateData = {};
+        if (conduct !== undefined) {
+            updateData.conduct = conduct;
+        }
+        if (performance !== undefined) {
+            updateData.academic_performance = performance;
+        }
+        
+        // Find and update student by ID
+        const student = await Student.findByIdAndUpdate(
+            studentId,
+            updateData,
+            { 
+                new: true, 
+                runValidators: true, 
+                select: '-password' 
+            }
+        );
+        
+        if (!student) {
+            return res.status(404).json({ 
+                message: 'Học sinh không tồn tại' 
+            });
+        }
+        
+        // Log activity
+        await logActivity({
+            userId: req.user ? req.user.userId : 'system',
+            role: req.user ? req.user.role : 'teacher',
+            action: `Cập nhật hạnh kiểm và học lực cho học sinh: ${student.name} (ID: ${studentId})`
+        });
+        
+        console.log(`Cập nhật hạnh kiểm và học lực cho học sinh ID: ${studentId} thành công.`);
+        
+        res.status(200).json({ 
+            message: 'Cập nhật hạnh kiểm và học lực thành công',
+            student: {
+                id: student._id,
+                name: student.name,
+                conduct: student.conduct,
+                academic_performance: student.academic_performance
+            }
+        });
+        
+    } catch (error) {
+        console.error('Lỗi cập nhật hạnh kiểm và học lực:', error);
+        res.status(500).json({ 
+            message: 'Lỗi server khi cập nhật hạnh kiểm và học lực',
+            error: error.message 
+        });
+    }
+};
+
+
 module.exports = {
     registerStudent,
     loginStudent,
@@ -898,5 +968,6 @@ module.exports = {
     Ai_Auto_Grade_And_Save,
     getStudentSchedule,
     updateAccountSettings,
-    changePassword
+    changePassword,
+    updateStudentConductAndPerformance
 };

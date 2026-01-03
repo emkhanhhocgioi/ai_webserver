@@ -73,5 +73,82 @@ async function createStudents() {
   }
 }
 
+// Hàm cập nhật conduct cho tất cả học sinh trong lớp
+async function updateStudentConduct() {
+  try {
+    console.log('Bắt đầu cập nhật conduct cho học sinh trong lớp...');
+
+    const result = await Student.updateMany(
+      { classid: new mongoose.Types.ObjectId(classId) },
+      { $set: { conduct: 'Tốt' } }
+    );
+
+    console.log(`✓ Đã cập nhật conduct = "Tốt" cho ${result.modifiedCount} học sinh!`);
+
+    // Hiển thị danh sách học sinh đã cập nhật
+    const updatedStudents = await Student.find({ classid: new mongoose.Types.ObjectId(classId) });
+    console.log('\n=== Danh sách học sinh đã cập nhật ===');
+    updatedStudents.forEach((student, index) => {
+      console.log(`${index + 1}. ${student.name} - Hạnh kiểm: ${student.conduct}`);
+    });
+
+    console.log('\n✓ Hoàn thành!');
+    process.exit(0);
+  } catch (error) {
+    console.error('Lỗi khi cập nhật conduct:', error);
+    process.exit(1);
+  }
+}
+
+// Hàm cập nhật conduct cho TẤT CẢ học sinh trong collections
+async function updateAllStudentsConduct() {
+  try {
+    console.log('Bắt đầu cập nhật conduct cho TẤT CẢ học sinh trong database...');
+
+    const result = await Student.updateMany(
+      {}, // Không có điều kiện lọc = áp dụng cho tất cả
+      { $set: { conduct: 'Tốt' } }
+    );
+
+    console.log(`✓ Đã cập nhật conduct = "Tốt" cho ${result.modifiedCount} học sinh!`);
+
+    // Đếm số học sinh theo lớp
+    const studentsByClass = await Student.aggregate([
+      {
+        $group: {
+          _id: '$classid',
+          count: { $sum: 1 }
+        }
+      }
+    ]);
+
+    console.log('\n=== Thống kê theo lớp ===');
+    for (const classGroup of studentsByClass) {
+      const students = await Student.find({ classid: classGroup._id });
+      console.log(`Lớp ${classGroup._id}: ${classGroup.count} học sinh`);
+      students.forEach((student, index) => {
+        console.log(`  ${index + 1}. ${student.name} - Hạnh kiểm: ${student.conduct}`);
+      });
+    }
+
+    console.log('\n✓ Hoàn thành!');
+    process.exit(0);
+  } catch (error) {
+    console.error('Lỗi khi cập nhật conduct:', error);
+    process.exit(1);
+  }
+}
+
+// Chọn chức năng muốn chạy:
+// - createStudents(): Tạo 30 học sinh mới
+// - updateStudentConduct(): Cập nhật conduct = "Tốt" cho học sinh trong 1 lớp cụ thể
+// - updateAllStudentsConduct(): Cập nhật conduct = "Tốt" cho TẤT CẢ học sinh trong database
+
 // Chạy hàm tạo học sinh
-createStudents();
+// createStudents();
+
+// Chạy hàm cập nhật conduct cho 1 lớp
+// updateStudentConduct();
+
+// Chạy hàm cập nhật conduct cho TẤT CẢ học sinh
+updateAllStudentsConduct();
