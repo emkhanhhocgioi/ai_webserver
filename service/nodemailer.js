@@ -3,9 +3,9 @@ const nodemailer = require("nodemailer");
 const transporter = nodemailer.createTransport({
   service: "gmail",
   auth: {
-    user: process.env.EMAIL_USER || 'hidrabula@gmail.com', 
-    pass: process.env.EMAIL_PASS  || 'khanh1308'
-  }
+    user: "hidrabula@gmail.com",
+    pass: "dgkg ruas hkqd nxmn",
+  },
 });
 
 // verify kết nối (optional)

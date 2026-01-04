@@ -8,16 +8,17 @@ const Classes = require('../schema/class_schema');
 const ClassStudent = require('../schema/class_student');
 const SubjectClass = require('../schema/subject_teacher');
 const Student = require('../schema/student');
-const Test = require('../schema/test_schema');
-const Question = require('../schema/test_question');
 const TestAnswer = require('../schema/test_answer');
-const Lesson = require('../schema/class_lesson');
-const TeachingSchedule = require('../schema/teaching_schedule');
-const TimeSlot = require('../schema/time_slot_schema');
-const { uploadToCloudinary,deleteImageFromCloudinary } = require('../midlewares/upload');
-const { CreateTestNotification } = require('./notifications_controller');
 const { logActivity } = require('../service/user_activity_service');
-// Controller functions
+
+// Import from other controllers
+const testController = require('./test_controller');
+const lessonController = require('./lesson_controller');
+const questionController = require('./question_controller');
+const scheduleController = require('./schedule_controller');
+
+// ==================== TEACHER AUTHENTICATION ====================
+
 const register = async (req, res) => {
   try {
     const {
@@ -117,7 +118,8 @@ const login = async (req, res) => {
   }
 };
 
-// Teacher Class
+// ==================== TEACHER CLASS FUNCTIONS ====================
+
 const TeacherGetClass = async (req, res) => {
   try {
     const teacherId = req.user.userId;
@@ -150,8 +152,6 @@ const TeacherGetClass = async (req, res) => {
     console.error('Lỗi lấy lớp học của giáo viên:', error);
   }
 };
-
-// Teacher Subject Class
 
 const TeacherGetSubjectClass = async (req, res) => {
   try {
@@ -190,6 +190,7 @@ const TeacherGetSubjectClass = async (req, res) => {
       ])
       : [];
     
+    const Test = require('../schema/test_schema');
     const TestCount = classIds.length ?
       await Test.aggregate([
         { $match: { classID: { $in: classIds }, teacherID: new mongoose.Types.ObjectId(teacherId) } },
@@ -264,984 +265,106 @@ const TeacherGetSubjectClass = async (req, res) => {
   }
 };
 
-// Teacher Test
-const getClassTest = async (req, res) => {
-  try {
-    
-    const { classId } = req.params;
-    
-    const teacherId = req.user.userId;
-    const teacherSubject = await Teacher.findById(teacherId).select('subject');
-    if (!teacherSubject) {
-      return res.status(404).json({ message: 'Giáo viên không tồn tại' });
-    }
-    const tests = await Test.find({ classID: classId , subject: teacherSubject.subject });
-    const submitCounts = await TestAnswer.aggregate([
-      { $match: { testID: { $in: tests.map(test => test._id) }, submit: true } },
-      { $group: { _id: "$testID", count: { $sum: 1 } } }
-    ]);
-    const mergedResults = tests.map(test => {
-      const submitCount = submitCounts.find(sc => sc._id.toString() === test._id.toString());
-      return {
-        ...test.toObject(),
-        submittedCount: submitCount ? submitCount.count : 0
-      };
-    });
+// ==================== TEACHER SETTINGS ====================
 
-    if (!tests || tests.length === 0) {
-      return res.status(404).json({ message: 'Không tìm thấy bài kiểm tra cho lớp này' });
-    }
-    
-    res.status(200).json({  tests: mergedResults });
-  } catch (error) {
-    res.status(500).json({ message: 'Đã xảy ra lỗi trong bài kiểm tra giáo viên' });
-    console.error('Lỗi trong bài kiểm tra giáo viên:', error);
-  }
-};
-const CreateTest = async (req, res) => {
-  try {
-    const teacherID = req.user.userId;
-    const { classID, testtitle, subject, closeDate } = req.body;
-    console.log("Creating test with data:", req.body);  
-    const newTest = new Test({
-      classID,
-      teacherID,
-      testtitle,
-      subject,
-      closeDate: closeDate,
-    });
-    await newTest.save();
-    
-    // Log activity
-    await logActivity({
-      userId: teacherID,
-      role: 'teacher',
-      action: `Tạo bài kiểm tra: "${testtitle}"`,
-      testId: newTest._id
-    });
-    
-    // Tạo và gửi thông báo cho học sinh
+const updateAccountSettings = async (req, res) => {
     try {
-      const wsService = req.app.get('wsService');
-      await CreateTestNotification(
-        teacherID,
-        classID,
-        newTest._id,
-        testtitle,
-        subject,
-        closeDate,
-        wsService
-      );
-      console.log('Test notification sent successfully');
-    } catch (notificationError) {
-      console.error('Error sending notification:', notificationError);
-      // Không throw error để không ảnh hưởng đến việc tạo test
-    }
-    
-    res.status(201).json({ message: 'Bài kiểm tra được tạo thành công', test: newTest });
-  } catch (error) {
-    res.status(500).json({ message: 'Đã xảy ra lỗi khi tạo bài kiểm tra' });
-    console.error('Lỗi khi tạo bài kiểm tra:', error);
-  }
-};
-const EditTestById = async (req, res) => {
-  try {
-    const { testId } = req.params;
-    const updateData = req.body;  
-    console.log("Updating test ID:", testId, "with data:", updateData);
-    const updatedTest = await Test.findByIdAndUpdate(testId, updateData, { new: true });
-    if (!updatedTest) {
-      return res.status(404).json({ message: 'Bài kiểm tra không tồn tại' });
-    }
-    
-    // Log activity
-    const teacherId = req.user.userId;
-    await logActivity({
-      userId: teacherId,
-      role: 'teacher',
-      action: `Chỉnh sửa bài kiểm tra: "${updatedTest.testtitle}"`,
-      testId: testId
-    });
-    
-    res.status(200).json({  
-      message: 'Bài kiểm tra đã được cập nhật thành công',
-      test: updatedTest
-    });
-  } catch (error) {
-    res.status(500).json({ message: 'Đã xảy ra lỗi khi cập nhật bài kiểm tra' });
-    console.error('Lỗi khi cập nhật bài kiểm tra:', error);
-  }
-};
-const DeleteTestById = async (req, res) => {
-  try {
-    const { testId } = req.params;
-    const deletedTest = await Test.findByIdAndDelete(testId);
-    if (!deletedTest) {
-      return res.status(404).json({ message: 'Bài kiểm tra không tồn tại' });
-    }
-    
-    // Log activity
-    const teacherId = req.user.userId;
-    await logActivity({
-      userId: teacherId,
-      role: 'teacher',
-      action: `Xóa bài kiểm tra: "${deletedTest.testtitle}"`,
-      testId: testId
-    });
-    
-    res.status(200).json({ message: 'Bài kiểm tra đã được xóa thành công' });
-  } catch (error) { 
-    res.status(500).json({ message: 'Đã xảy ra lỗi khi xóa bài kiểm tra' });
-    console.error('Lỗi khi xóa bài kiểm tra:', error);
-  }
-};
-const GetTestDetailById = async (req, res) => {
-  try {
-    const { testId } = req.params;
-    const test = await Test.findById(testId);
-
-    if (!test) {
-      return res.status(404).json({ message: 'Bài kiểm tra không tồn tại' });
-    }
-
-    // Lấy tất cả câu hỏi của bài kiểm tra
-    const questions = await Question.find({ testid: testId });
-
-    res.status(200).json({ 
-      test,
-      questions 
-    });
-  } catch (error) {
-    res.status(500).json({ message: 'Đã xảy ra lỗi khi lấy chi tiết bài kiểm tra' });
-    console.error('Lỗi khi lấy chi tiết bài kiểm tra:', error);
-  }
-};
-const TeacherGradingAsnwer = async (req, res) => {
-  try {
-    const { answerId } = req.params;
-    const { teacherGrade, teacherComments, answerData } = req.body;
-    console.log("Grading answer with data:", req.body);
-    console.log("Answer ID:", answerId);
-    console.log("Answer Data received:", JSON.stringify(answerData, null, 2));
-    
-    const updatedAnswer = await TestAnswer.findByIdAndUpdate(
-      answerId,
-      { 
-        teacherGrade, 
-        teacherComments,
-        answers: answerData,
-        isgraded: true
-      },
-      { new: true }
-    );
-    
-    if (!updatedAnswer) {
-      return res.status(404).json({ message: 'Câu trả lời không tồn tại' });
-    }
-    
-    console.log(req);
-    // Log activity
-    const teacherId = req.user.userId;
-    await logActivity({
-      userId: teacherId,
-      role: 'teacher',
-      action: `Chấm điểm bài làm của học sinh`,
-      testId: updatedAnswer.testID
-    });
-    
-    console.log("Updated answer:", updatedAnswer);
-    
-    res.status(200).json({
-      message: 'Câu trả lời đã được chấm điểm thành công',
-      answer: updatedAnswer
-    });
-  } catch (error) {
-    res.status(500).json({ message: 'Đã xảy ra lỗi khi chấm điểm câu trả lời' });
-    console.error('Lỗi khi chấm điểm câu trả lời:', error);
-  }
-};
-
-// Teacher Answer
-
-const getSubmittedAnswers = async (req, res) => {
-  try {
-    const { testId } = req.params;  
-    const submittedAnswers = await TestAnswer.find({ testID: testId, submit: true }).populate('studentID','name avatar' ).populate('testID',
-    'subject'
-    )
-    .populate('answers.questionID', 'question questionType'); 
-    res.status(200).json({ submittedAnswers });
-  } catch (error) {
-    res.status(500).json({ message: 'Đã xảy ra lỗi khi lấy câu trả lời đã nộp' });
-    console.error('Lỗi khi lấy câu trả lời đã nộp:', error);
-  }
-};
-
-
-// test question management
-const CreateQuestion = async (req, res) => {
-  try {
-    const { testId } = req.params;
-    const { difficult, question, questionType,subjectQuestionType, grade, solution } = req.body;
-    let { metadata, options } = req.body;
-
-    // Parse options if it's a JSON string
-    if (typeof options === 'string') {
-      try {
-        options = JSON.parse(options);
-      } catch (e) {
-        options = [];
-      }
-    }
-
-    // Kiểm tra xem bài test có tồn tại không
-    const test = await Test.findById(testId);
-    if (!test) {
-      return res.status(404).json({ message: 'Bài kiểm tra không tồn tại' });
-    }
-
-    // Xử lý upload file nếu có
-    if (req.file) {
-      try {
-        const imageUrl = await uploadToCloudinary(
-          req.file.buffer, 
-          req.file.originalname,
-          'questionImages'
-        );
-        metadata = imageUrl;
-      } catch (uploadError) {
-        console.error('Lỗi upload ảnh:', uploadError);
-        return res.status(500).json({ message: 'Lỗi khi upload ảnh câu hỏi' });
-      }
-    } else {
-      metadata = null;
-    }
-
-    // Tạo câu hỏi mới
-    const newQuestion = new Question({
-      testid: testId,
-      difficult,
-      question,
-      questionType,
-      subjectQuestionType,
-      grade,
-      solution,
-      metadata,
-      options
-    });
-
-    await newQuestion.save();
-
-    // Log activity
-    const teacherId = req.user.userId;
-    await logActivity({
-      userId: teacherId,
-      role: 'teacher',
-      action: `Tạo câu hỏi cho bài kiểm tra`,
-      testId: testId
-    });
-
-    res.status(201).json({ 
-      message: 'Câu hỏi được tạo thành công', 
-      question: newQuestion 
-    });
-
-  } catch (error) {
-    res.status(500).json({ message: 'Đã xảy ra lỗi khi tạo câu hỏi' });
-    console.error('Lỗi khi tạo câu hỏi:', error);
-  }
-};
-const CreateQuestions = async (req, res) => {
-  try {
-    const { testId } = req.params;
-
-    // Handle both array and object with questions property
-    let questionsData;
-    if (Array.isArray(req.body)) {
-      questionsData = req.body;
-    } else if (req.body.questions) {
-      // Parse if it's a string, otherwise use as-is
-      questionsData = typeof req.body.questions === 'string' 
-        ? JSON.parse(req.body.questions) 
-        : req.body.questions;
-    } else {
-      return res.status(400).json({ message: 'Dữ liệu câu hỏi không hợp lệ' });
-    }
-
-    console.log('questionsData parsed:', questionsData);
-    console.log('Number of questions:', questionsData.length);
-    
-    const createdQuestions = [];
-    const files = req.files || [];
-
-    // Kiểm tra bài test tồn tại
-    const test = await Test.findById(testId);
-    if (!test) {
-      console.error('❌ Test không tồn tại:', testId);
-      return res.status(404).json({ message: 'Bài kiểm tra không tồn tại' });
-    }
-
-    for (let i = 0; i < questionsData.length; i++) {
-      const questionData = questionsData[i];
-      console.log(`\n🟡 [QUESTION ${i + 1}] Dữ liệu ban đầu:`, questionData);
-
-      const {
-        difficult,
-        question,
-        questionType,
-        subjectQuestionType,
-        grade,
-        solution,
-        options
-      } = questionData;
-
-      let metadata = questionData.metadata || null;
-
-      // Tìm file tương ứng với câu hỏi
-      const fileForQuestion = files.find(
-        f => f.fieldname === `file_${i}`
-      );
-
-      if (fileForQuestion) {
-        console.log(`🟡 [QUESTION ${i + 1}] Có file upload:`, {
-          filename: fileForQuestion.originalname,
-          size: fileForQuestion.size
-        });
-
-        try {
-          const uploadResult = await uploadToCloudinary(
-            fileForQuestion.buffer,
-            fileForQuestion.originalname
-          );
-          metadata = uploadResult.secure_url;
-
-          console.log(`🟢 [QUESTION ${i + 1}] Upload thành công:`, metadata);
-        } catch (uploadError) {
-          console.error(`🔴 [QUESTION ${i + 1}] Lỗi upload ảnh:`, uploadError);
-        }
-      } else {
-        console.log(`⚪ [QUESTION ${i + 1}] Không có file upload`);
-      }
-
-      const newQuestion = new Question({
-        testid: testId,
-        difficult,
-        question,
-        questionType,
-        subjectQuestionType,
-        grade,
-        solution,
-        metadata,
-        options
-      });
-
-      console.log(`🟡 [QUESTION ${i + 1}] Trước khi save DB`);
-
-      await newQuestion.save();
-
-      console.log(`🟢 [QUESTION ${i + 1}] Đã lưu DB với ID:`, newQuestion._id);
-
-      createdQuestions.push(newQuestion);
-    }
-
-    console.log('✅ Tạo câu hỏi hoàn tất');
-
-    res.status(201).json({
-      message: 'Các câu hỏi được tạo thành công',
-      questions: createdQuestions
-    });
-
-  } catch (error) {
-    console.error('🔥 Lỗi tổng khi tạo câu hỏi:', error);
-    res.status(500).json({
-      message: 'Đã xảy ra lỗi khi tạo các câu hỏi'
-    });
-  }
-};
-
-const DeleteQuestion = async (req, res) => {
-  try {
-    const { questionId } = req.params;
-    const deletedQuestion = await Question.findByIdAndDelete(questionId);
-
-    if (!deletedQuestion) {
-      return res.status(404).json({ message: 'Câu hỏi không tồn tại' });
-    }
-    
-    // Log activity
-    const teacherId = req.user.userId;
-    await logActivity({
-      userId: teacherId,
-      role: 'teacher',
-      action: `Xóa câu hỏi`,
-      testId: deletedQuestion.testid
-    });
-    
-    res.status(200).json({ message: 'Câu hỏi đã được xóa thành công' });
-  } catch (error) {
-    res.status(500).json({ message: 'Đã xảy ra lỗi khi xóa câu hỏi' });
-    console.error('Lỗi khi xóa câu hỏi:', error);
-  }
-};
-const UpdateQuestion = async (req, res) => {
-  try {
-    const { questionId } = req.params;
-    const updateData = { ...req.body };
-    
-    // Parse options if it's a JSON string
-    if (typeof updateData.options === 'string') {
-      try {
-        updateData.options = JSON.parse(updateData.options);
-      } catch (e) {
-        updateData.options = [];
-      }
-    }
-    const isExistingQuestion = await Question.findById(questionId);
-    if (!isExistingQuestion) {
-      return res.status(404).json({ message: 'Câu hỏi không tồn tại' });
-    }
-    
-    // Xử lý upload file mới nếu có
-    if (req.file) {
-      // Xóa ảnh cũ nếu tồn tại
-      if (isExistingQuestion.metadata) {
-        try {
-          await deleteImageFromCloudinary(isExistingQuestion.metadata);
-          console.log('Old image deleted successfully from Cloudinary');
-        } catch (deleteError) {
-          console.error('Lỗi khi xóa ảnh cũ:', deleteError);
-          // Tiếp tục upload ảnh mới ngay cả khi xóa ảnh cũ thất bại
-        }
-      }
       
-      // Upload ảnh mới
-      try {
-        const imageUrl = await uploadToCloudinary(
-          req.file.buffer, 
-          req.file.originalname,
-          'questionImages'
-        );
-        updateData.metadata = imageUrl;
-      } catch (uploadError) {
-        console.error('Lỗi upload ảnh:', uploadError);
-        return res.status(500).json({ message: 'Lỗi khi upload ảnh câu hỏi' });
-      }
-    } else if (updateData.metadata === undefined) {
-      // Nếu không có file mới và metadata không được gửi trong body, giữ nguyên metadata cũ
-      // Không làm gì
-    } else if (updateData.metadata === '' || updateData.metadata === 'null') {
-      // Nếu muốn xóa metadata
-      if (isExistingQuestion.metadata) {
-        try {
-          await deleteImageFromCloudinary(isExistingQuestion.metadata);
-          console.log('Image deleted from Cloudinary');
-        } catch (deleteError) {
-          console.error('Lỗi khi xóa ảnh:', deleteError);
-        }
-      }
-      updateData.metadata = null;
-    }
-    
-    const updatedQuestion = await Question.findByIdAndUpdate(questionId, updateData, { new: true });
-    if (!updatedQuestion) {
-      return res.status(404).json({ message: 'Câu hỏi không tồn tại' });
-    }
-    
-    // Log activity
-    const teacherId = req.user.userId;
-    await logActivity({
-      userId: teacherId,
-      role: 'teacher',
-      action: `Cập nhật câu hỏi`,
-      testId: updatedQuestion.testid
-    });
-    
-    res.status(200).json({
-      message: 'Câu hỏi đã được cập nhật thành công',
-      question: updatedQuestion
-    });
-  } catch (error) {
-    res.status(500).json({ message: 'Đã xảy ra lỗi khi cập nhật câu hỏi' });
-    console.error('Lỗi khi cập nhật câu hỏi:', error);
-  }
-};
-
-// Lesson Management
-
-const createLesson = async (req, res) => {
-  try {
-    const { title, classId, subject } = req.body;
-    const teacherId = req.user.userId;
-    let lessonMetadata = null;
-    let fileType = null;
-    if (req.file) {
-      try {
-        fileType = req.file.mimetype;
-        lessonMetadata = await uploadToCloudinary(
-          req.file.buffer,
-          req.file.originalname,
-          'lessonMaterials'
-        );
-      } catch (uploadError) {
-        console.error('Error uploading lesson file:', uploadError);
-        return res.status(500).json({ message: 'Error uploading lesson file' });
-      }
-    }
-    
-    const newLesson = new Lesson({
-      title,
-      classId,
-      teacherId,
-      subject,
-      lessonMetadata,
-      fileType: fileType
-    });
-    
-    await newLesson.save();
-    
-    // Log activity
-    await logActivity({
-      userId: teacherId,
-      role: 'teacher',
-      action: `Tạo bài học: "${title}"`,
-      lessonId: newLesson._id
-    });
-    
-    res.status(201).json({ message: 'Lesson created successfully', lesson: newLesson });
-  } catch (error) {
-    res.status(500).json({ message: 'Error creating lesson' });
-    console.error('Error creating lesson:', error);
-  }
-}
-
-const getTeacherLessons = async (req, res) => {
-  try {
-    const teacherId = req.user.userId;
-    const { classId } = req.query; // Get classId from query params
-    
-    // Build query object
-    const query = { teacherId };
-    if (classId) {
-      query.classId = classId;
-    }
-    
-    const lessons = await Lesson.find(query);
-    
-    if (!lessons || lessons.length === 0) {
-      return res.status(200).json({ message: 'No lessons found for this teacher', lessons: [] });
-    }
-    
-    res.status(200).json({ lessons });
-  } catch (error) {
-    res.status(500).json({ message: 'Error fetching lessons' });
-    console.error('Error fetching lessons:', error);
-  }
-};
-
-const TeacherGetLessonsById= async (req, res) => {
-  try {
-    const { lessonId } = req.params;
-    const lesson = await Lesson.findById(lessonId).populate('classId').populate('teacherId', 'name');
-
-    if (!lesson) {
-      return res.status(404).json({ message: 'Lesson not found' });
-    } 
-    res.status(200).json({ lesson });
-  }
-  catch (error) {
-    res.status(500).json({ message: 'Error fetching lesson details' });
-    console.error('Error fetching lesson details:', error);
-  }
-};
-
-const DeleteLessonById = async (req, res) => {
-  try {
-    const { lessonId } = req.params;
-    if (!lessonId) {
-      return res.status(400).json({ message: 'Lesson ID is required' });
-    }
-    
-    // First, find the lesson to get its metadata
-    const lesson = await Lesson.findById(lessonId);
-    if (!lesson) { 
-      return res.status(404).json({ message: 'Lesson not found' }); 
-    }
-    
-    // Delete file from Cloudinary if metadata exists
-    if (lesson.lessonMetadata) {
-      const response = await deleteImageFromCloudinary(lesson.lessonMetadata);
-      if (response) {
-        console.log('Lesson file deleted successfully from Cloudinary');
-      }
-    }
-    
-    // Delete the lesson from database
-    await Lesson.findByIdAndDelete(lessonId);
-    
-    // Log activity
-    const teacherId = req.user.userId;
-    await logActivity({
-      userId: teacherId,
-      role: 'teacher',
-      action: `Xóa bài học: "${lesson.title}"`,
-      lessonId: lessonId
-    });
-    
-    res.status(200).json({ message: 'Lesson deleted successfully' });
-  } catch (error) {
-    res.status(500).json({ message: 'Error deleting lesson' });
-    console.error('Error deleting lesson:', error);
-  }
-};
-const UpdateLesson = async (req, res) => {
-  try {
-    const { lessonId } = req.params;
-    const { title, classId, teacherId, subject } = req.body;
-    
-    const isExistingLesson = await Lesson.findById(lessonId);
-    if (!isExistingLesson) {
-      return res.status(404).json({ message: 'Lesson not found' });
-    }
-    
-    // Prepare update data
-    const updateData = {
-      title,
-      classId,
-      teacherId,
-      subject
-    };
-    
-    // Handle new file upload if exists
-    if (req.file) {
-      // Delete old file if exists    
-      if (isExistingLesson.lessonMetadata) {
-        try {
-          await deleteImageFromCloudinary(isExistingLesson.lessonMetadata); 
-          console.log('Old lesson file deleted successfully from Cloudinary');
-        } catch (deleteError) {
-          console.error('Error deleting old lesson file:', deleteError);
-        }
-      } 
-      // Upload new file
-      try {
-        const fileUrl = await uploadToCloudinary(
-          req.file.buffer, 
-          req.file.originalname,
-          'lessonMaterials'
-        );
-        updateData.lessonMetadata = fileUrl;
-      }
-      catch (uploadError) {
-        console.error('Error uploading lesson file:', uploadError); 
-        return res.status(500).json({ message: 'Error uploading lesson file' });
-      } 
-    }
-    // If no new file uploaded, keep the existing metadata
-    // Don't delete or modify lessonMetadata unless explicitly uploading a new file
-    const updatedLesson = await Lesson.findByIdAndUpdate(lessonId, updateData, { new: true });
-    if (!updatedLesson) {
-      return res.status(404).json({ message: 'Lesson not found' });
-    }
-    
-    // Log activity
-  
-    await logActivity({
-      userId: teacherId,
-      role: 'teacher',
-      action: `Cập nhật bài học: "${updatedLesson.title}"`,
-      lessonId: lessonId
-    });
-    
-    res.status(200).json({
-      success: true,
-      message: 'Lesson updated successfully',
-      lesson: updatedLesson
-    });
-  }
-  catch (error) {
-    res.status(500).json({ message: 'Error updating lesson' });
-    console.error('Error updating lesson:', error);
-  }
-};
-
-
-
-// analytics and reports can be added here in the future
-const ClassAvarageGrades = async (req, res) => {  
-  try {
-    const teacherId = req.user.userId;
-    
-    if(!teacherId){
-      return res.status(400).json({ message: 'Teacher ID is required' });
-    }
-
-    const subjectClasses = await SubjectClass.find({ 
-      $or: [
-        { toan: teacherId },
-        { ngu_van: teacherId },
-        { tieng_anh: teacherId },
-        { vat_ly: teacherId },
-        { hoa_hoc: teacherId },
-        { sinh_hoc: teacherId },
-        { lich_su: teacherId },
-        { dia_ly: teacherId },
-        { giao_duc_cong_dan: teacherId },
-        { cong_nghe: teacherId },
-        { tin_hoc: teacherId },
-        { the_duc: teacherId },
-        { am_nhac: teacherId },
-        { my_thuat: teacherId }
-      ]
-    });
-
-    const classIds = subjectClasses.map(sc => sc.classid);
-
-    const classAverages = [];
-    for (const classId of classIds) {
-      const tests = await Test.find({ classID: classId });
-      let totalGrades = 0;
-      let gradeCount = 0;
-      let maxGrade = null;
-      let minGrade = null;
-
-      for (const test of tests) {
-        const answers = await TestAnswer.find({ testID: test._id, isgraded: true });
-        for (const answer of answers) {
-          const g = Number(answer.teacherGrade);
-          if (!Number.isFinite(g)) continue;
-          totalGrades += g;
-          gradeCount += 1;
-          if (maxGrade === null || g > maxGrade) maxGrade = g;
-          if (minGrade === null || g < minGrade) minGrade = g;
-        }
-      }
-
-      const averageGrade = gradeCount > 0 ? (totalGrades / gradeCount) : 0;
-      
-      // Get students with average grades below 4.0
-      const classStudents = await ClassStudent.find({ classID: classId }).populate('studentID', 'name email');
-      const studentsBelow40 = [];
-      
-      for (const classStudent of classStudents) {
-        if (!classStudent.studentID) continue;
-        
-        const studentId = classStudent.studentID._id;
-        const testIds = tests.map(t => t._id);
-        const studentAnswers = await TestAnswer.find({ 
-          testID: { $in: testIds }, 
-          studentID: studentId,
-          isgraded: true 
-        });
-        
-        let studentTotal = 0;
-        let studentCount = 0;
-        
-        for (const answer of studentAnswers) {
-          const grade = Number(answer.teacherGrade);
-          if (Number.isFinite(grade)) {
-            studentTotal += grade;
-            studentCount += 1;
-          }
-        }
-        
-        const studentAverage = studentCount > 0 ? (studentTotal / studentCount) : 0;
-        
-        if (studentAverage < 4.0 && studentCount > 0) {
-          studentsBelow40.push({
-            studentId: studentId,
-            studentName: classStudent.studentID.name,
-            studentEmail: classStudent.studentID.email,
-            averageGrade: studentAverage,
-            testCount: studentCount
-          });
-        }
-      }
-      
-      classAverages.push({
-        classId,
-        averageGrade,
-        highestGrade: maxGrade,
-        lowestGrade: minGrade,
-        gradedCount: gradeCount,
-        studentsBelow40: studentsBelow40
-      });
-    }
-    
-    res.status(200).json({ classAverages });
-    
-  } catch (error) {
-    res.status(500).json({ message: 'Error calculating class average grades' });
-    console.error('Error calculating class average grades:', error);
-    
-  }
-}
-const TestsAnylytics = async (req, res) => {
-  try {
-    const teacherId = req.user.userId;
-    if(!teacherId){
-      return res.status(400).json({ message: 'Teacher ID is required' });
-    }
-
-    // Get all classes where this teacher teaches
-    const classSubjects = await SubjectClass.find({ 
-      $or: [
-        { toan: teacherId },
-        { ngu_van: teacherId },
-        { tieng_anh: teacherId },
-        { vat_ly: teacherId },
-        { hoa_hoc: teacherId },
-        { sinh_hoc: teacherId },
-        { lich_su: teacherId },
-        { dia_ly: teacherId },
-        { giao_duc_cong_dan: teacherId },
-        { cong_nghe: teacherId },
-        { tin_hoc: teacherId },
-        { the_duc: teacherId },
-        { am_nhac: teacherId },
-        { my_thuat: teacherId }
-      ]
-    }).populate('classid');
-
-    const classIds = classSubjects.map(cs => cs.classid).filter(Boolean);
-    
-    // Get all tests assigned by this teacher
-    const allTests = await Test.find({ teacherID: teacherId });
-    const totalTestsAssigned = allTests.length;
-    
-    // Calculate submitted and unsubmitted counts
-    let totalSubmitted = 0;
-    let totalUnsubmitted = 0;
-    
-    for (const test of allTests) {
-      const classId = test.classID;
-      
-      // Get number of students in this class
-      const studentCount = await ClassStudent.countDocuments({ classID: classId });
-      
-      // Get number of submitted answers for this test
-      const submittedCount = await TestAnswer.countDocuments({ 
-        testID: test._id, 
-        submit: true 
-      });
-      
-      totalSubmitted += submittedCount;
-      
-      // Unsubmitted = total students - submitted
-      const unsubmittedForThisTest = studentCount - submittedCount;
-      totalUnsubmitted += unsubmittedForThisTest > 0 ? unsubmittedForThisTest : 0;
-    }
-
-    res.status(200).json({
-      message: 'Test analytics fetched successfully',
-      analytics: {
-        totalTestsAssigned: totalTestsAssigned,
-        totalSubmitted: totalSubmitted,
-        totalUnsubmitted: totalUnsubmitted
-      }
-    });
-
-  } catch (error) {
-    res.status(500).json({ message: 'Error fetching test analytics' });
-    console.error('Error fetching test analytics:', error);
-  }
-
-};
-
-// Get teacher's teaching schedule
-const getTeacherSchedule = async (req, res) => {
-    try {
         const teacherId = req.user.userId;
-        const { semester } = req.query;
+        const { notifications, darkMode, TestReminder } = req.body;
+        console.log("Updating account settings for teacher ID:", teacherId);
 
-        // Build query
-        const query = { teacherId: teacherId };
-        if (semester) {
-            query.semester = semester;
-        }
-
-        // Get all teaching schedules for the teacher
-        const schedules = await TeachingSchedule.find(query)
-            .populate('classId', 'class_code class_year class_grade')
-            .populate('timeSlotId', 'dayOfWeek startTime endTime session period')
-            .sort({ 'timeSlotId.dayOfWeek': 1, 'timeSlotId.startTime': 1 });
-
-        if (!schedules || schedules.length === 0) {
-            return res.status(404).json({
-                success: false,
-                message: "Không tìm thấy lịch dạy"
-            });
-        }
-
-        // Get teacher's subject
-        const teacher = await Teacher.findById(teacherId).select('name subject email');
+        const teacher = await Teacher.findById(teacherId);
         if (!teacher) {
-            return res.status(404).json({
-                success: false,
-                message: "Không tìm thấy thông tin giáo viên"
-            });
+            return res.status(404).json({ message: 'Không tìm thấy giáo viên' });
         }
 
-        // Organize schedule by day of week
-        const organizedSchedule = {
-            Mon: [],
-            Tue: [],
-            Wed: [],
-            Thu: [],
-            Fri: [],
-            Sat: [],
-            Sun: []
-        };
+        // Initialize accountSettings if it doesn't exist
+        if (!teacher.accountSettings) {
+            teacher.accountSettings = {
+                notifications: true,
+                darkMode: false,
+                TestReminder: true
+            };
+        }
 
-        schedules.forEach(schedule => {
-            if (schedule.timeSlotId && schedule.timeSlotId.dayOfWeek) {
-                organizedSchedule[schedule.timeSlotId.dayOfWeek].push({
-                    scheduleId: schedule._id,
-                    class: {
-                        id: schedule.classId?._id,
-                        class_code: schedule.classId?.class_code,
-                        class_year: schedule.classId?.class_year,
-                        class_grade: schedule.classId?.class_grade
-                    },
-                    subject: teacher.subject,
-                    timeSlot: {
-                        startTime: schedule.timeSlotId.startTime,
-                        endTime: schedule.timeSlotId.endTime,
-                        session: schedule.timeSlotId.session,
-                        period: schedule.timeSlotId.period
-                    },
-                    semester: schedule.semester
-                });
-            }
-        });
+        // Update account settings
+        if (notifications !== undefined) {
+            teacher.accountSettings.notifications = notifications;
+        }
+        if (darkMode !== undefined) {
+            teacher.accountSettings.darkMode = darkMode;
+        }
+        if (TestReminder !== undefined) {
+            teacher.accountSettings.TestReminder = TestReminder;
+        }
+
+        await teacher.save();
 
         // Log activity
         await logActivity({
             userId: teacherId,
             role: 'teacher',
-            action: `Xem lịch dạy${semester ? ' học kỳ ' + semester : ''}`
+            action: 'Cập nhật cài đặt tài khoản'
         });
 
         res.status(200).json({
-            success: true,
-            teacher: {
-                id: teacher._id,
-                name: teacher.name,
-                subject: teacher.subject,
-                email: teacher.email
-            },
-            totalSchedules: schedules.length,
-            schedules: organizedSchedule
+            message: 'Cập nhật cài đặt thành công',
+            accountSettings: teacher.accountSettings
         });
-
     } catch (error) {
-        console.error('Lỗi khi lấy lịch dạy:', error);
-        res.status(500).json({
-            success: false,
-            message: "Lỗi server khi lấy lịch dạy",
-            error: error.message
-        });
+        console.error('Lỗi cập nhật cài đặt:', error);
+        res.status(500).json({ message: 'Lỗi server' });
     }
 };
+
+const changePassword = async (req, res) => {
+    try {
+        const teacherId = req.user.userId;
+        const { currentPassword, newPassword } = req.body;
+
+        // Validate input
+        if (!currentPassword || !newPassword) {
+            return res.status(400).json({ message: 'Vui lòng nhập đầy đủ thông tin' });
+        }
+
+        if (newPassword.length < 6) {
+            return res.status(400).json({ message: 'Mật khẩu mới phải có ít nhất 6 ký tự' });
+        }
+
+        const teacher = await Teacher.findById(teacherId);
+        if (!teacher) {
+            return res.status(404).json({ message: 'Không tìm thấy giáo viên' });
+        }
+
+        // Verify current password
+        const validPassword = await bcrypt.compare(currentPassword, teacher.password);
+        if (!validPassword) {
+            return res.status(400).json({ message: 'Mật khẩu hiện tại không đúng' });
+        }
+
+        // Hash new password
+        const hashedPassword = await bcrypt.hash(newPassword, 12);
+
+        // Update password
+        teacher.password = hashedPassword;
+        await teacher.save();
+
+        // Log activity
+        await logActivity({
+            userId: teacherId,
+            role: 'teacher',
+            action: 'Thay đổi mật khẩu'
+        });
+
+        res.status(200).json({ message: 'Đổi mật khẩu thành công' });
+    } catch (error) {
+        console.error('Lỗi đổi mật khẩu:', error);
+        res.status(500).json({ message: 'Lỗi server' });
+    }
+};
+
+// ==================== TEACHER MAILING FUNCTIONS ====================
 
 const teacherMailHomeroomClass = async (req, res) => {
   try {
@@ -1325,8 +448,8 @@ const teacherMailHomeroomClass = async (req, res) => {
     console.error('Lỗi khi gửi email cho lớp chủ nhiệm của giáo viên:', error);
     res.status(500).json({ message: 'Đã xảy ra lỗi khi gửi thư' });
   }
-}
-// Subject Class Mailing Service 
+};
+
 const teacherMailSubjectClass = async (req, res) => {
   try {
     const { message, title } = req.body;
@@ -1424,7 +547,7 @@ const teacherMailSubjectClass = async (req, res) => {
     console.error('Lỗi khi gửi email cho lớp học môn của giáo viên:', error);
     res.status(500).json({ message: 'Đã xảy ra lỗi khi gửi thư' });
   }
-}
+};
 
 const teacherMailToStudent = async (req, res) => {
   try {
@@ -1470,9 +593,10 @@ const teacherMailToStudent = async (req, res) => {
     console.error('Lỗi khi gửi email cho học sinh:', error);
     res.status(500).json({ message: 'Đã xảy ra lỗi khi gửi thư' });
   }
-}
+};
 
-// Get student average grade by subject
+// ==================== TEACHER GRADE FUNCTIONS ====================
+
 const getStudentAverageGradeBySubject = async (req, res) => {
   try {
     const { studentId, subject } = req.query;
@@ -1496,7 +620,6 @@ const getStudentAverageGradeBySubject = async (req, res) => {
   }
 };
 
-// Update all students' average grades in a class for a subject
 const updateClassStudentsAverageGrade = async (req, res) => {
   try {
     const { classId, subject } = req.body;
@@ -1526,7 +649,6 @@ const updateClassStudentsAverageGrade = async (req, res) => {
     res.status(500).json({ message: 'Error updating students average grades: ' + error.message });
   }
 };
-
 
 const getClassStudentsAllSubjectsAverage = async (req, res) => {
   try {
@@ -1609,7 +731,7 @@ const getClassStudentsAllSubjectsAverage = async (req, res) => {
         const avg = grades.reduce((a, b) => a + b, 0) / grades.length;
         subjects.push({
           subjectName,
-          averageScore: Math.round(avg * 100) / 100 // Round to 2 decimal places
+          averageScore: Math.round(avg * 100) / 100
         });
         totalScore += avg;
         subjectCount++;
@@ -1638,35 +760,292 @@ const getClassStudentsAllSubjectsAverage = async (req, res) => {
   }
 };
 
+// ==================== ADMIN TEACHER MANAGEMENT FUNCTIONS ====================
+
+const AdminGetTeacherData = async (req, res) => {
+    try {
+        const teachers = await Teacher.find();
+        res.status(200).json({
+            success: true,
+            data: {
+                teachers: teachers
+            }
+        });
+    }
+    catch (error) {
+        console.error('Lỗi khi lấy dữ liệu giáo viên:', error);  
+        res.status(500).json({
+            success: false,
+            message: "Lỗi server",
+            error: error.message 
+        });
+    }
+};
+
+const AdminCreateTeacherAccount = async (req, res) => {
+    try {
+        const {
+            name,
+            email,
+            password,
+            age,
+            gender,
+            subject,
+            classInCharge,
+            phoneNumber,
+            yearsOfExperience,
+            avatar
+        } = req.body;
+
+        // Validate required fields
+        if (!name || !email || !password || age === undefined || age === null || !gender || !subject) {
+            return res.status(400).json({ message: 'Missing required fields' });
+        }
+
+        // Ensure age is a number
+        const numericAge = Number(age);
+        if (Number.isNaN(numericAge)) {
+            return res.status(400).json({ message: 'Age must be a number' });
+        }
+
+        const salt = await bcrypt.genSalt(10);
+        const hashedPassword = await bcrypt.hash(password, salt);
+
+        const newTeacher = new Teacher({
+            name,
+            email,
+            password: hashedPassword,
+            age: numericAge,
+            gender,
+            subject,
+            classInCharge: classInCharge || null,
+            phoneNumber: phoneNumber || '',
+            yearsOfExperience: yearsOfExperience || 0,
+            avatar: avatar || ''
+        });
+
+        await newTeacher.save();
+
+        res.status(201).json({
+            success: true,
+            message: 'Teacher account created successfully',
+            teacher: newTeacher
+        });
+    } catch (error) {
+        console.error('Error creating teacher account:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Error creating teacher account',
+            error: error.message
+        });
+    }
+};
+
+const AdminGetTeacherById = async (req, res) => {
+    try {
+        const teacherId = req.params.id;
+        const teacher = await Teacher.findById(teacherId);
+        if (!teacher) {
+            return res.status(404).json({
+                success: false,
+                message: "Không tìm thấy giáo viên"
+            });
+        }
+        res.status(200).json({
+            success: true,
+            teacher: teacher
+        });
+    }
+    catch (error) {
+        console.error('Lỗi khi lấy dữ liệu giáo viên theo ID:', error);
+        res.status(500).json({
+            success: false,
+            message: "Lỗi server",
+            error: error.message
+        });
+    }   
+};
+
+const AdminDeleteTeacherByID = async (req, res) => {
+    try {
+        const teacherId = req.params.id;
+        
+        // Xóa giáo viên
+        const deletedTeacher = await Teacher.findByIdAndDelete(teacherId);
+        
+        if (!deletedTeacher) {
+            return res.status(404).json({
+                success: false,
+                message: "Không tìm thấy giáo viên"
+            });
+        }
+
+        // Cập nhật các lớp có giáo viên này làm giáo viên chủ nhiệm
+        const ClassWithTeacher = await Classes.updateMany(
+            { class_teacher: teacherId },
+            { $set: { class_teacher: null } }
+        );
+
+        // Cập nhật các Subject_Teacher có giáo viên này
+        const SubjectClassWithTeacher = await SubjectClass.updateMany(
+            {
+                $or: [
+                    { toan: teacherId },
+                    { ngu_van: teacherId },
+                    { tieng_anh: teacherId },
+                    { vat_ly: teacherId },
+                    { hoa_hoc: teacherId },
+                    { sinh_hoc: teacherId },
+                    { lich_su: teacherId },
+                    { dia_ly: teacherId },
+                    { giao_duc_cong_dan: teacherId },
+                    { cong_nghe: teacherId },
+                    { tin_hoc: teacherId },
+                    { the_duc: teacherId },
+                    { am_nhac: teacherId },
+                    { my_thuat: teacherId }
+                ]
+            },
+            {
+                $set: {
+                    toan: null,
+                    ngu_van: null,
+                    tieng_anh: null,
+                    vat_ly: null,
+                    hoa_hoc: null,
+                    sinh_hoc: null,
+                    lich_su: null,
+                    dia_ly: null,
+                    giao_duc_cong_dan: null,
+                    cong_nghe: null,
+                    tin_hoc: null,
+                    the_duc: null,
+                    am_nhac: null,
+                    my_thuat: null
+                }
+            }
+        );
+                        
+        res.status(200).json({
+            success: true,
+            message: "Xóa giáo viên thành công",
+            deletedClasses: ClassWithTeacher.modifiedCount,
+            deletedSubjectTeachers: SubjectClassWithTeacher.modifiedCount
+        });
+    }   
+    catch (error) { 
+        console.error('Lỗi khi xóa giáo viên theo ID:', error);
+        res.status(500).json({
+            success: false,
+            message: "Lỗi server",
+            error: error.message
+        });
+    }   
+};
+
+const AdminUpdateTeacherByID = async (req, res) => {
+    try {
+        const teacherId = req.params.id;
+        const updateData = req.body;    
+        console.log("Cập nhật dữ liệu giáo viên:", updateData);
+        const updatedTeacher = await Teacher.findByIdAndUpdate(teacherId, updateData, { new: true });
+        if (!updatedTeacher) {
+            return res.status(404).json({
+                success: false,
+                message: "Không tìm thấy giáo viên"
+            });
+        }
+        res.status(200).json({
+            success: true,
+            teacher: updatedTeacher
+        });
+    } catch (error) {
+        console.error('Lỗi khi cập nhật giáo viên theo ID:', error);
+        res.status(500).json({
+            success: false,
+            message: "Lỗi server",
+            error: error.message
+        });
+    }
+};
+
+
+const GetTeacherById = async (req,res) => {
+    try {
+        const teacherId = req.user.userId;
+        const teacher = await Teacher.findById(teacherId);
+        if (!teacher) {
+            return res.status(404).json({
+                success: false,
+                message: "Không tìm thấy giáo viên"
+            });
+        } 
+        res.status(200).json({
+            success: true,
+            teacher: teacher
+        });
+    }
+    catch (error) { 
+        console.error('Lỗi khi lấy dữ liệu giáo viên theo ID:', error);
+        res.status(500).json({
+            success: false,
+            message: "Lỗi server",
+            error: error.message
+        });
+    }
+}
+
+
+
 
 module.exports = {
+  // Authentication
   register,
   login,
+  GetTeacherById,
+  // Settings
+  updateAccountSettings,
+  changePassword,
+  // Class functions
   TeacherGetClass,
   TeacherGetSubjectClass,
-  getClassTest,
-  CreateTest,
-  GetTestDetailById,
-  CreateQuestion,
-  DeleteQuestion,
-  UpdateQuestion,
-  DeleteTestById,
-  EditTestById,
-  getSubmittedAnswers,
-  TeacherGradingAsnwer,
-  CreateQuestions,
-  createLesson,
-  getTeacherLessons ,
-  DeleteLessonById,
-  UpdateLesson,
-  TeacherGetLessonsById,
-  ClassAvarageGrades,
-  TestsAnylytics,
-  getTeacherSchedule,
+  // Test functions (from test_controller)
+  getClassTest: testController.TeacherGetClassTest,
+  CreateTest: testController.TeacherCreateTest,
+  GetTestDetailById: testController.TeacherGetTestDetailById,
+  EditTestById: testController.TeacherEditTestById,
+  DeleteTestById: testController.TeacherDeleteTestById,
+  TeacherGradingAsnwer: testController.TeacherGradingAnswer,
+  getSubmittedAnswers: testController.TeacherGetSubmittedAnswers,
+  ClassAvarageGrades: testController.TeacherClassAverageGrades,
+  TestsAnylytics: testController.TeacherTestsAnalytics,
+  // Question functions (from question_controller)
+  CreateQuestion: questionController.TeacherCreateQuestion,
+  CreateQuestions: questionController.TeacherCreateQuestions,
+  DeleteQuestion: questionController.TeacherDeleteQuestion,
+  UpdateQuestion: questionController.TeacherUpdateQuestion,
+  // Lesson functions (from lesson_controller)
+  createLesson: lessonController.TeacherCreateLesson,
+  getTeacherLessons: lessonController.TeacherGetLessons,
+  TeacherGetLessonsById: lessonController.TeacherGetLessonsById,
+  DeleteLessonById: lessonController.TeacherDeleteLessonById,
+  UpdateLesson: lessonController.TeacherUpdateLesson,
+  AsignedTestToLesson: lessonController.asignedTestToLesson,
+  // Schedule function (from schedule_controller)
+  getTeacherSchedule: scheduleController.getTeacherSchedule,
+  // Mailing functions
   teacherMailSubjectClass,
   teacherMailHomeroomClass,
   teacherMailToStudent,
+  // Grade functions
   getStudentAverageGradeBySubject,
   updateClassStudentsAverageGrade,
-  getClassStudentsAllSubjectsAverage
+  getClassStudentsAllSubjectsAverage,
+  // Admin functions for Teacher Management
+  AdminGetTeacherData,
+  AdminCreateTeacherAccount,
+  AdminGetTeacherById,
+  AdminDeleteTeacherByID,
+  AdminUpdateTeacherByID
 };
+

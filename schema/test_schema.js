@@ -12,6 +12,11 @@ const testSchema = new Schema({
         ref:"Teacher",
         require: true
     },
+    lessonID:{
+        type: Schema.Types.ObjectId,
+        ref:"Lesson",
+        require: true
+    },
     testtitle: { 
         type: String, 
         required: true 

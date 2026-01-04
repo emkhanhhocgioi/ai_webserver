@@ -52,6 +52,20 @@ const teacherSchema = new Schema({
   isClassTeacher: {
     type: Boolean,
     default: false
+  },
+  accountSettings: {
+    notifications: {
+      type: Boolean,
+      default: true
+    },
+    darkMode: {
+      type: Boolean,
+      default: false
+    },
+    TestReminder: {
+      type: Boolean,
+      default: true
+    }
   }
 }, { timestamps: true });
 

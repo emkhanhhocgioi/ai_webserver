@@ -28,14 +28,20 @@ const upload_all = multer({
   }
 });
 
-
+// Teacher info
+router.get('/profile', teacherTokenVerify, teacherController.GetTeacherById);
 
 // Teacher AI question answer generate route
 router.post('/ai/question-answer/generate', teacherTokenVerify, AI_controller.ai_qa_gen);
 router.post('/ai/auto-grading', teacherTokenVerify, AI_controller.Ai_auto_grade);
+router.post('/ai/auto-grading/rubric', teacherTokenVerify, AI_controller.Teacher_AI_grading_Base_on_rubic);
 router.post('/ai/auto-grading/file', teacherTokenVerify, AI_controller.Ai_Auto_Grading_from_file);
 router.post('/ai/auto-grading/image', teacherTokenVerify, AI_controller.AI_Auto_Grading_from_image);
 
+
+// Teacher settings routes
+router.patch('/settings', teacherTokenVerify, teacherController.updateAccountSettings);
+router.patch('/settings/password', teacherTokenVerify, teacherController.changePassword);
 
 // Teacher class and student management route
 router.get('/class', teacherTokenVerify, teacherController.TeacherGetClass);
@@ -69,6 +75,7 @@ router.get('/lessons', teacherTokenVerify, teacherController.getTeacherLessons);
 router.delete('/lessons/:lessonId', teacherTokenVerify, teacherController.DeleteLessonById);
 router.put('/lessons/:lessonId', teacherTokenVerify, upload_all.single('file'), teacherController.UpdateLesson);
 router.get('/lessons/:lessonId', teacherTokenVerify, teacherController.TeacherGetLessonsById);
+router.patch('/lessons/:lessonId/assign-test', teacherTokenVerify, teacherController.AsignedTestToLesson);
 
 
 // Get analytics data
