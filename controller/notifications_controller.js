@@ -1,8 +1,8 @@
-const Notification = require('../../mono/schema/notification_schema');
-const Student = require('../../mono/schema/student');
-const Teacher = require('../../mono/schema/teacher');
-const ClassStudent = require('../../mono/schema/class_student');
-const ClassSubject = require('../../mono/schema/subject_teacher');
+const Notification = require('../schema/notification_schema');
+const Student = require('../schema/student');
+const Teacher = require('../schema/teacher');
+const ClassStudent = require('../schema/class_student');
+const ClassSubject = require('../schema/subject_teacher');
 
 
 // Teacher Notifications
