@@ -590,8 +590,9 @@ module.exports = {
     GetTestGradingById: testController.GetTestGradingById,
     GetRecentInCorrectAnswers: testController.GetRecentInCorrectAnswers,
     getAllSubjectsGrade: testController.getAllSubjectsGrade,
-    
+    getTestBySubject: testController.getTestBySubject,
     // Lesson functions (from lesson_controller)
+    getLessonBySubjectforStudent: lessonController.getLessonBySubjectforStudent,
     getStudentLessons: lessonController.getStudentLessons,
     searchLessonsAndTests: lessonController.searchLessonsAndTests,
     searchTeachersByQuery: lessonController.searchTeachersByQuery,

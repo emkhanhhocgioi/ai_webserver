@@ -1,3 +1,5 @@
+require('dotenv').config();
+
 const express = require('express')
 const cors = require('cors')
 
@@ -13,7 +15,6 @@ const admin_routes = require('./routes/admin')
 const WebSocketService = require('./service/websocket');
 const {cloudinary} = require('./utils/cloudiary-utils');
 const app = express();
-require('dotenv').config();
 
 app.use(cors({
   origin: ["http://localhost:3000", "https://schoolmanageai.vercel.app","https://elearn-ai.vercel.app"],
@@ -54,9 +55,30 @@ app.get('/api/ws/rooms', (req, res) => {
 
 const PORT = process.env.PORT || 4000;
 
+// Check MongoDB connection
+mongoose.connection.on('connected', () => {
+    console.log('MongoDB connected successfully');
+});
+
+mongoose.connection.on('error', (err) => {
+    console.error('MongoDB connection error:', err);
+});
+
+mongoose.connection.on('disconnected', () => {
+    console.log('MongoDB disconnected');
+});
+
 server.listen(PORT, () => {
     console.log(`API gateway is running on port ${PORT}`);
     console.log(`WebSocket service is ready`);
-   
-
+    
+    // Check current MongoDB connection state
+    const connectionState = mongoose.connection.readyState;
+    const states = {
+        0: 'disconnected',
+        1: 'connected',
+        2: 'connecting',
+        3: 'disconnecting'
+    };
+    console.log(`MongoDB connection state: ${states[connectionState]}`);
 });

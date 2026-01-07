@@ -42,9 +42,12 @@ router.get('/test/grading/:testId',verifyStudentToken, studentController.GetTest
 router.post('/test/answer/file-upload', uploadAny.single('file'), verifyStudentToken, answerController.FileUploadToQuestion);
 router.put('/test/answer/edit', verifyStudentToken, answerController.editAnswer);
 router.put('/test/answer/file-edit', uploadAny.single('file'), verifyStudentToken, answerController.editUploadQuestion);
+router.get('/test/subject/:subject', verifyStudentToken, studentController.getTestBySubject);
 
 //lesson routes 
+router.get('/lesson/subject/:subject', verifyStudentToken, studentController.getLessonBySubjectforStudent);
 router.get('/lessons', verifyStudentToken, studentController.getStudentLessons);
+
 
 // Teacher contact routes
 router.get('/teachers/contact', studentController.TeacherContact);

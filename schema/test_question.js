@@ -16,7 +16,7 @@ const TestQuestion = new Schema({
     grade: {type: Number , required: true},
     solution: { type: String, required: true }, 
     metadata: {type: String, default: ''},
-    options: {type: Array , required: true}
+    options: {type: Array , required: false},
 })
 
 const Question  = mongoose.model('Question', TestQuestion)

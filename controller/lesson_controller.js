@@ -154,6 +154,25 @@ const getStudentLessons = async (req, res) => {
         console.error('Error fetching lessons:', error);
     }
 };
+const getLessonBySubjectforStudent = async (req, res) => {
+    try {
+        const studentId = req.user.userId;  
+        const { subject } = req.params;
+        // Find the class ID for the student
+        const classStudent = await ClassStudent.findOne({ studentID: studentId });
+        if (!classStudent) {
+            return res.status(404).json({ message: 'Lớp học sinh không tìm thấy' });
+        }
+        const classId = classStudent.classID;
+
+        // Find lessons for the class and subject
+        const lessons = await Lesson.find({ classId, subject: subject }).select('title');
+        res.status(200).json({ lessons });
+    } catch (error) {
+        res.status(500).json({ message: 'Error fetching lessons by subject' });
+        console.error('Error fetching lessons by subject:', error);
+    }
+};
 
 // Search for lesson or test by query
 const searchLessonsAndTests = async (req, res) => {
@@ -432,8 +451,6 @@ const TeacherUpdateLesson = async (req, res) => {
     console.error('Error updating lesson:', error);
   }
 };
-
-
 const asignedTestToLesson = async (req, res) => {
     try {
         const { lessonId, testId } = req.body;
@@ -457,6 +474,9 @@ const asignedTestToLesson = async (req, res) => {
     }   
 };
 
+
+
+
 module.exports = {
     createLesson,
     getAllLessons,
@@ -465,6 +485,7 @@ module.exports = {
     deleteLesson,
     // Student Lesson functions
     getStudentLessons,
+    getLessonBySubjectforStudent,
     searchLessonsAndTests,
     searchTeachersByQuery,
     TeacherContact,

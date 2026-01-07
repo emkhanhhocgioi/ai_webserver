@@ -280,47 +280,75 @@ const GetTestGradingById = async (req, res) => {
 const GetRecentInCorrectAnswers = async (req, res) => {
     try {
         const studentid = req.user.userId;
-        const { subject } = req.body;
-
-        let Answers = await TestAnswer.find({ studentID: studentid, submit: true })
-            .populate({ path: 'testID', match: { subject } })
-            .sort({ createdAt: -1 })
-            .limit(3);
-
-        // Lọc bỏ các doc KHÔNG có testID hợp lệ
-        Answers = Answers.filter(a => a.testID);
-        // Lọc ra những answer có câu trả lời sai
-        const incorrectAnswers = Answers.filter(answer => Array.isArray(answer.answers) && answer.answers.some(ans => ans.isCorrect === false));
-
-        // Xử lý song song để lấy questionType cho từng câu trả lời sai
-        const results = await Promise.all(incorrectAnswers.map(async (answer) => {
-            const incorrectQuestions = await Promise.all(
-                answer.answers
-                    .filter(ans => ans.isCorrect === false)
-                    .map(async (ans) => {
-                        const question = await Question.findById(ans.questionId).select('questionType');
-                        return {
-                            questionId: ans.questionId,
-                            studentAnswer: ans.answer,
-                            questionType: question?.questionType || null
-                        };
-                    })
-            );
-            return {
-                testId: answer.testID._id,
-                testSubject: answer.testID.subject,
-                incorrectQuestions
-            };
-        }));
-
-        // Tập hợp danh sách questionType duy nhất
-        const questTypes = Array.from(new Set(results.flatMap(r => r.incorrectQuestions.map(iq => iq.questionType).filter(Boolean))));
+        const { subject, testid } = req.body;
+        console.log("Fetching recent incorrect answers for student ID:", studentid, "subject:", subject, "testid:", testid); 
         
-        const responseAi = await AI_controller.GetRecentInCorrectAnswers(questTypes);
-        res.status(200).json({ questTypes, responseAi });
+        // Populate questionID để lấy chi tiết câu hỏi
+        const Answers = await TestAnswer.find({ studentID: studentid, testID: testid })
+            .populate({
+                path: 'answers.questionID',
+                select: 'question questionType solution options'
+            })
+            .populate('testID', 'testtitle subject');
+           
+        console.log("Recent Answers fetched:", Answers.length);
+        
+        if(!Answers || Answers.length === 0){
+            return res.status(200).json({ 
+                message: 'Không tìm thấy câu trả lời sai gần đây',
+                incorrectAnswers: []
+            });
+        }
+        
+        // Lấy tất cả câu trả lời sai với chi tiết đầy đủ
+        const incorrectAnswersDetails = [];
+        
+        for (const answer of Answers) {
+            const incorrectQuestions = answer.answers.filter(a => !a.isCorrect && a.questionID);
+            
+            if (incorrectQuestions.length > 0) {
+                const testInfo = {
+                    testId: answer.testID._id,
+                    testTitle: answer.testID.testtitle,
+                    testSubject: answer.testID.subject,
+                    submissionTime: answer.submissionTime,
+                    incorrectQuestions: incorrectQuestions.map(iq => ({
+                        questionId: iq.questionID._id,
+                        question: iq.questionID.question,
+                        questionType: iq.questionID.questionType,
+                        options: iq.questionID.options,
+                        solution: iq.questionID.solution,
+                        studentAnswer: iq.answer,
+                        isCorrect: iq.isCorrect
+                    }))
+                };
+                
+                incorrectAnswersDetails.push(testInfo);
+            }
+        }
+        
+        // Thống kê loại câu hỏi sai
+        const questTypes = Array.from(new Set(
+            incorrectAnswersDetails.flatMap(test => 
+                test.incorrectQuestions.map(iq => iq.questionType).filter(Boolean)
+            )
+        ));
+        
+        console.log("Incorrect Question Types:", questTypes);
+        console.log("Total incorrect questions:", incorrectAnswersDetails.reduce((sum, test) => sum + test.incorrectQuestions.length, 0));
+        
+        const responseai = await AI_controller.GetRecentInCorrectAnswers(incorrectAnswersDetails, questTypes,subject);
+        if(!responseai){
+            return res.status(500).json({ message: 'Lỗi khi lấy câu trả lời sai từ AI' });
+        }
+        res.status(200).json({ 
+            message: 'Lấy danh sách câu trả lời sai thành công',
+            data: responseai
+        });
+        
     } catch (error) {
         console.error('Error fetching incorrect answers:', error);
-        res.status(500).json({ message: 'Error fetching incorrect answers' });
+        res.status(500).json({ message: 'Lỗi khi lấy câu trả lời sai' });
     }
 };
 
@@ -536,6 +564,13 @@ const TeacherDeleteTestById = async (req, res) => {
     if (!deletedTest) {
       return res.status(404).json({ message: 'Bài kiểm tra không tồn tại' });
     }
+    const testAwnsers = await TestAnswer.deleteMany({ testID: testId });
+    if (testAwnsers.deletedCount === 0) {
+      console.log('Không tìm thấy câu trả lời nào để xóa cho bài kiểm tra này');
+    }
+    if(deletedTest && testAwnsers){ 
+      res.status(200).json({ message: 'Bài kiểm tra đã được xóa thành công' });
+    }
     
     // Log activity
     const teacherId = req.user.userId;
@@ -546,7 +581,7 @@ const TeacherDeleteTestById = async (req, res) => {
       testId: testId
     });
     
-    res.status(200).json({ message: 'Bài kiểm tra đã được xóa thành công' });
+  
   } catch (error) { 
     res.status(500).json({ message: 'Đã xảy ra lỗi khi xóa bài kiểm tra' });
     console.error('Lỗi khi xóa bài kiểm tra:', error);
@@ -743,6 +778,20 @@ const TeacherClassAverageGrades = async (req, res) => {
   }
 };
 
+const getTestBySubject = async (req, res) => {
+  try {
+    const studentid = req.user.userId;
+    const { subject } = req.params;
+    const classStudent = await ClassStudent.findOne({ studentID: studentid });
+
+    const tests = await TestScheme.find({ subject: subject , classID: classStudent.classID });
+    console.log("Tests fetched for subject:", subject, tests);
+    res.status(200).json(tests);
+
+  } catch (error) { 
+    res.status(500).json({ message: "Lỗi server" });
+  }
+};
 const TeacherTestsAnalytics = async (req, res) => {
   try {
     const teacherId = req.user.userId;
@@ -827,6 +876,7 @@ module.exports = {
     GetTestGradingById,
     GetRecentInCorrectAnswers,
     getAllSubjectsGrade,
+    getTestBySubject,
     // Teacher Test functions
     TeacherGetClassTest,
     TeacherCreateTest,

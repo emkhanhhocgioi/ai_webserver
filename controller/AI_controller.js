@@ -2,6 +2,8 @@ const axios = require('axios');
 const Student = require('../schema/student');
 const Answer = require('../schema/test_answer');
 const Test = require('../schema/test_schema');
+const Lesson = require('../schema/class_lesson');
+
 const Ai_Generate_Question_Answer = async (req, res) => {   
     try {
         const {prompt } = req.body;
@@ -40,39 +42,41 @@ const Ai_Generate_math_Question_Answer = async (req, res) => {
     }
 };
 
-// Tạo đề tiếng anh
+
 
 
 const Ai_Generate_Base_on_TeacherComment = async (req, res) => {
     try {
         const studentid = req.user.userId;
-        const {subject} = req.body;
+        const {subject ,lessonid} = req.body;
         console.log("Received subject:", subject);
+        console.log("Received lesson ID:", lessonid);
         console.log("Received student ID:", studentid);
+        
 
-        const Answers = await Answer.find({ studentID: studentid, submit: true, teacherComments: { $ne: '' } })
-            .populate({
-            path: 'testID',
-            match: { subject },
-            select: 'subject'
-            });
-        console.log("Fetched Answers:", Answers);
-        // // chỉ giữ những answer có testID được populate (subject khớp)
-        const filteredAnswers = Answers.filter(a => a.testID);
-        if (filteredAnswers.length === 0) {
-            return res.status(404).json({ error: 'No answers found for this student and subject.' });
+        //3 test từ lessonid
+        const test = await Test.find({ lessonID: lessonid }).limit(3);
+        console.log("Fetched Tests:", test);
+        
+        const testAnswers = [];
+        for (const t of test) {
+            const answer = await Answer.findOne({ testID: t._id, studentID: studentid, isgraded: true, teacherComments: { $ne: '' } });
+            if (answer) {
+                testAnswers.push(answer);
+            }
         }
-        // sắp xếp giảm dần theo createdAt và lấy answer gần nhất
-        filteredAnswers.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
-        const latestAnswer = filteredAnswers[0];
-        // tạo prompt từ trường phù hợp (fallback sang JSON nếu không có trường rõ ràng)
-        const prompt = latestAnswer.teacherComments
-        console.log("Generated prompt:", prompt);
+        const lessonTitle = await Lesson.findById(lessonid).select('title');
+        const listComments = testAnswers.map(ans => ans.teacherComments).join('\n');
+        console.log("Compiled Teacher Comments:", listComments);
        
-        const max_tokens = 256;
-        const temperature = 0.7;    
+
+       
+      
         const response = await axios.post('http://localhost:8000/analyze-teacher-feedback', {
-            teacher_comment: prompt,
+            teacher_comment: listComments,
+            subject: subject,
+            lesson: lessonTitle ? lessonTitle.title : 'Unknown Lesson',
+            test_answers: testAnswers
         });
         res.status(200).json(response.data);       
     } catch (error) {
@@ -97,11 +101,24 @@ const AI_Grading_essay = async (req, res) => {
     }
 };
 
-const GetRecentInCorrectAnswers = async (recent_tests) => {
+const GetRecentInCorrectAnswers = async (recent_tests , questionTypes,subject) => {
     try {
+
+          const subjectmap = {
+            'Toán': 'math',
+            'Ngữ Văn': 'van',
+            'Vật Lý': 'physics',
+            'Hóa Học': 'chemistry',
+            'Sinh Học': 'biology',
+            'Tiếng Anh': 'english',
+            'Lịch Sử': 'history',
+            'Địa Lý': 'geography'
+        };
+        const reqsubject = subjectmap[subject] || subject;
         const response = await axios.post('http://localhost:8000/recent-test', {
             recent_tests,
-            
+            questionTypes,
+            subject: reqsubject
         });
         return response.data;
     } catch (error) {
