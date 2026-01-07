@@ -2,7 +2,7 @@ const express = require('express')
 const cors = require('cors')
 
 const http = require('http');
-const mongoose = require('../mono/dtb/shared_database')
+const mongoose = require('./dtb/shared_database')
 const class_service = require('./routes/classservice')
 const auth_routes = require('./routes/auth')
 const test_routes = require('./routes/testservice')
