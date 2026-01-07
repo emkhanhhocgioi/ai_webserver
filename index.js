@@ -2,7 +2,7 @@ const express = require('express')
 const cors = require('cors')
 
 const http = require('http');
-const mongoose = require('./dtb/shared_database')
+const mongoose = require('../mono/dtb/shared_database')
 const class_service = require('./routes/classservice')
 const auth_routes = require('./routes/auth')
 const test_routes = require('./routes/testservice')
@@ -56,9 +56,6 @@ const PORT = process.env.PORT || 4000;
 server.listen(PORT, () => {
     console.log(`API gateway is running on port ${PORT}`);
     console.log(`WebSocket service is ready`);
-    console.log(`Cloudinary Config:`, {
-      cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
-      api_key: process.env.CLOUDINARY_API_KEY,
-      api_secret: process.env.CLOUDINARY_API_SECRET
-    });
+   
+
 });

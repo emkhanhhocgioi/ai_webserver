@@ -1,10 +1,12 @@
 const nodemailer = require("nodemailer");
+require('dotenv').config();
 
+// cấu hình transporter
 const transporter = nodemailer.createTransport({
   service: "gmail",
   auth: {
-    user: "hidrabula@gmail.com",
-    pass: "dgkg ruas hkqd nxmn",
+    user: process.env.EMAIL,
+    pass: process.env.EMAIL_PASSWORD,
   },
 });
 

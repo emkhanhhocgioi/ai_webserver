@@ -2,7 +2,6 @@ const multer = require('multer');
 const { cloudinary } = require('../utils/cloudiary-utils');
 const path = require('path');
 
-// Cấu hình multer để lưu file tạm thời trong memory
 const storage = multer.memoryStorage();
 
 // File filter để chỉ cho phép upload ảnh
@@ -138,8 +137,7 @@ const handleImageUploads = async (req, res, next) => {
  */
 const deleteImageFromCloudinary = async (fileUrl, resourceType = 'image') => {
     try {
-        // Extract public_id from URL
-        // URL format: https://res.cloudinary.com/{cloud_name}/{resource_type}/upload/{version}/{folder}/{public_id}.{format}
+        
         let publicId;
         
         if (fileUrl.includes('cloudinary.com')) {

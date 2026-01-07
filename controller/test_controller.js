@@ -212,8 +212,10 @@ const StudentGetClassTest = async (req, res) => {
             const existingAnswer = await TestAnswer.findOne({ 
                 testID: test._id, 
                 studentID: studentid 
+
             });
             test.hasSubmitted = !!existingAnswer;
+            test.isGraded=  !!existingAnswer?.isgraded || false;
             return test;
         }));
 
