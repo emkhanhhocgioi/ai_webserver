@@ -2,7 +2,7 @@ const express = require('express')
 const cors = require('cors')
 
 const http = require('http');
-const mongoose = require('./dtb/shared_database')
+const mongoose = require('./dtb/shared_database');
 const class_service = require('./routes/classservice')
 const auth_routes = require('./routes/auth')
 const test_routes = require('./routes/testservice')
@@ -15,7 +15,7 @@ const app = express();
 require('dotenv').config();
 
 app.use(cors({
-  origin: ["http://localhost:3000", "https://schoolmanageai.vercel.app"],
+  origin: ["http://localhost:3000", "https://schoolmanageai.vercel.app","https://elearn-ai.vercel.app"],
   credentials: true
 }));
 app.use(express.json());
