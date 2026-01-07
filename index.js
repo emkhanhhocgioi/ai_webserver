@@ -3,6 +3,7 @@ const cors = require('cors')
 
 const http = require('http');
 const mongoose = require('./dtb/shared_database');
+const transporter =  require('./service/nodemailer');
 const class_service = require('./routes/classservice')
 const auth_routes = require('./routes/auth')
 const test_routes = require('./routes/testservice')
