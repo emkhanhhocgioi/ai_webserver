@@ -1,43 +1,45 @@
 const mongoose = require('mongoose');
-require('dotenv').config();
 
-const uri = process.env.MONGODB_URI  ;
+const uri = process.env.MONGODB_URI;
 
-// Connect to MongoDB using Mongoose
 async function connectDB() {
+  if (!uri) {
+    console.error('❌ MONGODB_URI is not defined');
+    return;
+  }else{
+    console.log('MongoDB URI:', uri);
+  }
+
   try {
     await mongoose.connect(uri, {
-      useNewUrlParser: true,
-      useUnifiedTopology: true,
+      serverSelectionTimeoutMS: 5000, // QUAN TRỌNG
     });
-    console.log("Successfully connected to MongoDB with Mongoose!");
+    console.log('✅ MongoDB connected');
   } catch (error) {
-    console.error("MongoDB connection error:", error);
-    process.exit(1);
+    console.error('❌ MongoDB connection failed:', error.message);
+    // ❌ KHÔNG process.exit
   }
 }
 
-// Handle connection events
+// Events
 mongoose.connection.on('connected', () => {
-  console.log('Mongoose connected to MongoDB');
+  console.log('Mongoose connected');
 });
 
 mongoose.connection.on('error', (err) => {
-  console.error('Mongoose connection error:', err);
+  console.error('Mongoose error:', err.message);
 });
 
 mongoose.connection.on('disconnected', () => {
   console.log('Mongoose disconnected');
 });
 
-// Graceful shutdown
+// KHÔNG tự động kill app
 process.on('SIGINT', async () => {
   await mongoose.connection.close();
-  console.log('MongoDB connection closed through app termination');
   process.exit(0);
 });
 
-// Initialize connection
 connectDB();
 
 module.exports = mongoose;
