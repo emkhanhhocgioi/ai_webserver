@@ -16,7 +16,7 @@ router.get('/personal/daily-question-answer', verifyStudentToken, studentControl
 // Notification routes
 router.get('/notifications', verifyStudentToken, notificationController.getStudentNotifications);
 router.patch('/notifications/:notificationId/read', verifyStudentToken, notificationController.markNotificationAsRead);
-
+router.get('/notifications/unread-count', verifyStudentToken, notificationController.getUnreadNotificationCount);
 // Search routes
 router.get('/search/all', verifyStudentToken, studentController.searchLessonsAndTests);
 router.get('/search/Teachers', verifyStudentToken, studentController.searchTeachersByQuery);
@@ -30,6 +30,7 @@ router.post('/ai/grading/essay', verifyStudentToken ,AI_controller.AI_Grading_es
 router.post('/ai/recent-incorrect-answers', verifyStudentToken, studentController.GetRecentInCorrectAnswers);
 router.post('/ai/daily-question-answer', verifyStudentToken, studentController.Ai_Daily_Generate_Question_Answer);
 router.post('/ai/auto-grade', verifyStudentToken, studentController.Ai_Auto_Grade_And_Save);
+router.post('/ai/recent-test-grading-feedback', verifyStudentToken, AI_controller.Ai_recent_test_grading_and_feedback);
 
 
 // Grade Summary routes

@@ -998,6 +998,54 @@ const GetTeacherById = async (req,res) => {
 
 
 
+// ==================== TEST NOTIFICATION ====================
+
+const testBroadcastNotification = async (req, res) => {
+  try {
+    // Get WebSocket service instance
+    const wsService = req.app.get('wsService');
+    
+    if (!wsService) {
+      return res.status(500).json({
+        success: false,
+        message: 'WebSocket service không khả dụng'
+      });
+    }
+
+    // Test data for a single student
+    const title = 'test thông báo';
+    const message = 'test thông báo';
+    const testStudentId = '692fb1de9572f2c8b7204de4';
+    
+    const testNotification = {
+      title: title,
+      message: message,
+      type: 'new_notification',
+      createdAt: new Date(),
+      senderId: req.user?.userId,
+      senderName: req.user?.name || 'Test Sender'
+    };
+    
+    // Broadcast the notification to a single student
+    const sentCount = wsService.broadcastNotificationToStudents([testStudentId], testNotification);
+    
+    return res.status(200).json({
+      success: true,
+      message: 'Notification sent to student',
+      sentCount,
+      studentId: testStudentId,
+      notification: testNotification
+    });
+  } catch (error) {
+    console.error('Error in testBroadcastNotification:', error);
+    return res.status(500).json({
+      success: false,
+      message: 'Có lỗi xảy ra khi gửi notification',
+      error: error.message
+    });
+  }
+};
+
 module.exports = {
   // Authentication
   register,
@@ -1046,6 +1094,8 @@ module.exports = {
   AdminCreateTeacherAccount,
   AdminGetTeacherById,
   AdminDeleteTeacherByID,
-  AdminUpdateTeacherByID
+  AdminUpdateTeacherByID,
+  // Test functions
+  testBroadcastNotification
 };
 

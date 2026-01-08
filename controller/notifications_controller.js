@@ -89,8 +89,23 @@ const markNotificationAsRead = async (req, res) => {
     }
 };
 
+const getUnreadNotificationCount = async (req,res) => {
+    try {
+        const studentId = req.user.userId;
+        const count = await Notification.countDocuments({
+            recipients: studentId,
+            isReadBy: { $ne: studentId }
+        });
+        res.status(200).json({ unreadCount: count });
+    } catch (error) {
+        console.error('Error fetching unread notification count:', error);
+        res.status(500).json({ message: 'Error fetching unread notification count' });
+    }
+};
+
 module.exports = {
     CreateTestNotification,
     getStudentNotifications,
-    markNotificationAsRead
+    markNotificationAsRead,
+    getUnreadNotificationCount
 };

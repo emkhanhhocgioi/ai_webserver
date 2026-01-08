@@ -92,4 +92,7 @@ router.get('/schedule', teacherTokenVerify, teacherController.getTeacherSchedule
 router.post('/send-email/homeroom', teacherTokenVerify, teacherController.teacherMailHomeroomClass);
 router.post('/send-email/subject/class', teacherTokenVerify, teacherController.teacherMailSubjectClass);
 
+// Test notification routes
+router.post('/test/notification', teacherController.testBroadcastNotification);
+
 module.exports = router;

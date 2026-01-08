@@ -412,7 +412,38 @@ const Ai_Auto_Grade_And_Save = async (req, res) => {
     }
 };
 
+const Ai_recent_test_grading_and_feedback = async (req,res) => {
+    try {
+        const { grading_datas, subject } = req.body;
+        console.log("Received recent tests for grading and feedback:", grading_datas);
+        console.log("Subject:", subject);
+        
 
+        const subjectmap = {
+            'Toán': 'math',
+            'Ngữ Văn': 'van',
+            'Vật Lý': 'physics',
+            'Hóa Học': 'chemistry',
+            'Sinh Học': 'biology',
+            'Tiếng Anh': 'english',
+            'Lịch Sử': 'history',
+            'Địa Lý': 'geography'
+        };
+
+        const reqsubject = subjectmap[subject] || subject;
+
+        const response = await axios.post('http://localhost:8000/recent-test-grading', {
+            questions: grading_datas,
+            subject: reqsubject
+        });
+
+        res.status(200).json(response.data);
+        
+    } catch (error) {
+        console.error('Error grading recent tests and providing feedback:', error);
+        res.status(500).json({ error: 'Failed to grade recent tests and provide feedback.', details: error.message });
+    }
+}
 const Teacher_AI_grading_Base_on_rubic = async (req, res) => {
     try {
         const { answerid, rubric_criteria, subject } = req.body;
@@ -497,6 +528,7 @@ module.exports = {
     DailyTestSubjectChange,
     GetDailyQuestionAnswer,
     Ai_Auto_Grade_And_Save,
+    Ai_recent_test_grading_and_feedback,
     // Teacher AI functions
     Teacher_AI_grading_Base_on_rubic
 };
