@@ -4,6 +4,7 @@ const Answer = require('../schema/test_answer');
 const Test = require('../schema/test_schema');
 const Lesson = require('../schema/class_lesson');
 
+const api_url = 'https://elearn-ai-bot.onrender.com';
 const Ai_Generate_Question_Answer = async (req, res) => {   
     try {
         const {prompt } = req.body;
@@ -11,7 +12,7 @@ const Ai_Generate_Question_Answer = async (req, res) => {
         const max_tokens = 256;
         const temperature = 0.7;
 
-        const response = await axios.post('http://localhost:8000/generate', {
+        const response = await axios.post(`${api_url}/generate`, {
             prompt,
             max_tokens,
             temperature
@@ -31,7 +32,7 @@ const Ai_Generate_math_Question_Answer = async (req, res) => {
         console.log("Received prompt:", prompt);
         const max_tokens = 256;
         const temperature = 0.7;
-        const response = await axios.post('http://localhost:8000/generate_math', {
+        const response = await axios.post(`${api_url}/generate_math`, {
             problem_statement:prompt,
           
         });
@@ -72,7 +73,7 @@ const Ai_Generate_Base_on_TeacherComment = async (req, res) => {
 
        
       
-        const response = await axios.post('http://localhost:8000/analyze-teacher-feedback', {
+        const response = await axios.post(`${api_url}/analyze-teacher-feedback`, {
             teacher_comment: listComments,
             subject: subject,
             lesson: lessonTitle ? lessonTitle.title : 'Unknown Lesson',
@@ -90,7 +91,7 @@ const AI_Grading_essay = async (req, res) => {
         console.log("Received answer text for grading:", student_answer);
        
 
-        const response = await axios.post('http://localhost:8000/grade-essay', {
+        const response = await axios.post(`${api_url}/grade-essay`, {
             exercise_question,
             student_answer,
         });
@@ -115,7 +116,7 @@ const GetRecentInCorrectAnswers = async (recent_tests , questionTypes,subject) =
             'Địa Lý': 'geography'
         };
         const reqsubject = subjectmap[subject] || subject;
-        const response = await axios.post('http://localhost:8000/recent-test', {
+        const response = await axios.post(`${api_url}/recent-test`, {
             recent_tests,
             questionTypes,
             subject: reqsubject
@@ -146,7 +147,7 @@ const ai_qa_gen = async (req, res) => {
         };
         const reqsubject = subjectmap[subject] || subject;
         console.log("Received prompt:", prompt);
-        const response = await axios.post('http://localhost:8000/generate_question', {
+        const response = await axios.post(`${api_url}/generate_question`, {
             prompt,
             subject: reqsubject
         });
@@ -176,7 +177,7 @@ const Ai_auto_grade = async (req, res) => {
             'Địa Lý': 'geography'
         };
         const reqsubject = subjectmap[subject] || subject;
-        const response = await axios.post('http://localhost:8000/auto-grading', {
+        const response = await axios.post(`${api_url}/auto-grading`, {
             exercise_question,
             student_answer,
             subject: reqsubject,
@@ -202,7 +203,7 @@ const Ai_Auto_Grading_from_file = async (req, res) => {
             'Địa Lý': 'geography'
         };
         const reqsubject = subjectmap[subject] || subject;
-        const response = await axios.post('http://localhost:8000/auto-grading/file', {
+        const response = await axios.post(`${api_url}/auto-grading/file`, {
             exercise_question,
             fileUrl: student_answer_file_url,
             subject: reqsubject,
@@ -228,7 +229,7 @@ const AI_Auto_Grading_from_image = async (req, res) => {
             'Địa Lý': 'geography'
         };
         const reqsubject = subjectmap[subject] || subject;
-        const response = await axios.post('http://localhost:8000/auto-grading/image', {
+        const response = await axios.post(`${api_url}/auto-grading/image`, {
             exercise_question,
             fileUrl: student_answer_image_url,
             subject: reqsubject,
@@ -265,7 +266,7 @@ const Ai_Daily_Generate_Question_Answer = async (subject, recentTests) => {
         
         console.log("Sending to AI:", { subject: reqsubject, recentTests: testInfo });
         
-        const response = await axios.post('http://localhost:8000/performance/question-generation', {
+        const response = await axios.post(`${api_url}/performance/question-generation`, {
             subject: reqsubject,
             recent_tests: testInfo
         });
@@ -367,7 +368,7 @@ const Ai_Auto_Grade_And_Save = async (req, res) => {
         const reqsubject = subjectmap[subject] || subject;
         
         // Call AI grading service
-        const response = await axios.post('http://localhost:8000/auto-grading', {
+        const response = await axios.post(`${api_url}/auto-grading`, {
             exercise_question,
             student_answer,
             subject: reqsubject,
@@ -432,7 +433,7 @@ const Ai_recent_test_grading_and_feedback = async (req,res) => {
 
         const reqsubject = subjectmap[subject] || subject;
 
-        const response = await axios.post('http://localhost:8000/recent-test-grading', {
+        const response = await axios.post(`${api_url}/recent-test-grading`, {
             questions: grading_datas,
             subject: reqsubject
         });
@@ -491,7 +492,7 @@ const Teacher_AI_grading_Base_on_rubic = async (req, res) => {
         const reqsubject = subjectmap[subject] || subject || testAnswer.testID?.subject || 'van';
 
         // Gửi request tới AI service
-        const response = await axios.post('http://localhost:8000/grade-with-rubric', {
+        const response = await axios.post(`${api_url}/grade-with-rubric`, {
             test_title: testAnswer.testID?.testtitle || 'Bài kiểm tra',
             subject: reqsubject,
             questions_and_answers: questionsAndAnswers,

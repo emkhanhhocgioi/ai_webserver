@@ -59,8 +59,16 @@ const getStudentNotifications = async (req, res) => {
         const studentId = req.user.userId;  
         const notifications = await Notification.find({ recipients: studentId })
             .populate('sender', 'name')
-            .sort({ createdAt: -1 });
-        res.status(200).json({ notifications });
+            .sort({ createdAt: -1 })
+            .lean();
+        
+        // Add isRead field to each notification
+        const notificationsWithReadStatus = notifications.map(notification => ({
+            ...notification,
+            isRead: notification.isReadBy.some(id => id.toString() === studentId.toString())
+        }));
+        
+        res.status(200).json({ notifications: notificationsWithReadStatus });
     } catch (error) {
         console.error('Error fetching notifications:', error);
         res.status(500).json({ message: 'Error fetching notifications' });
