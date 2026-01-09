@@ -91,12 +91,11 @@ const loginStudent = async (req, res) => {
         // Update last login time
         student.lastLogin = now;
         
-        // Save student data and wait for completion
-        console.log("=== SAVING STUDENT DATA ===");
+     
         await student.save();
-        console.log("=== STUDENT DATA SAVED ===");
+     
         
-        // Create token after data is saved
+    
         const studentId = student._id.toString();
         const token = jwt.sign(
             { 
@@ -117,7 +116,8 @@ const loginStudent = async (req, res) => {
               id: studentId,
               name: student.name,
               email: student.email,
-              classid: student.classid
+              classid: student.classid,
+              settings: student.accountSettings || {}
           }
         });
         

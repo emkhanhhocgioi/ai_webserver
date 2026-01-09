@@ -4,6 +4,7 @@ const TestScheme = require('../schema/test_schema')
 const Teacher = require('../schema/teacher')
 const { logActivity } = require('../service/user_activity_service');
 const { uploadToCloudinary, deleteImageFromCloudinary } = require('../midlewares/upload');
+const TestAnswer = require('../schema/test_answer');
 
 // Create a new lesson
 const createLesson = async (req, res) => {
@@ -202,6 +203,22 @@ const searchLessonsAndTests = async (req, res) => {
             ]
         });
         
+        // Check submission and grading status for each test
+        const testsWithStatus = await Promise.all(tests.map(async (test) => {
+            const testAnswer = await TestAnswer.findOne({ 
+                testID: test._id, 
+                studentID: studentId 
+            });
+            
+            return {
+                ...test.toObject(),
+                status: {
+                    submitted: !!testAnswer, // true if testAnswer exists
+                    graded: testAnswer?.isgraded // true if score exists
+                }
+            };
+        }));
+        
         // Log activity
         await logActivity({
             userId: studentId,
@@ -209,7 +226,7 @@ const searchLessonsAndTests = async (req, res) => {
             action: `Tìm kiếm bài học và bài kiểm tra: "${query}"`
         });
         
-        res.status(200).json({ lessons, tests });
+        res.status(200).json({ lessons, tests: testsWithStatus });
     } catch (error) {
         res.status(500).json({ message: 'Error searching lessons and tests' });
         console.error('Error searching lessons and tests:', error);
