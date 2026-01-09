@@ -46,6 +46,7 @@ router.patch('/settings/password', teacherTokenVerify, teacherController.changeP
 // Teacher class and student management route
 router.get('/class', teacherTokenVerify, teacherController.TeacherGetClass);
 router.get('/class/subjects', teacherTokenVerify, teacherController.TeacherGetSubjectClass);
+
 // Student
 router.patch('/students/:studentId', teacherTokenVerify, studentController.updateStudentConductAndPerformance);
 

@@ -10,6 +10,7 @@ const testController = require('./test_controller');
 const lessonController = require('./lesson_controller');
 const AI_controller = require('./AI_controller');
 const scheduleController = require('./schedule_controller');
+const Test = require('../schema/test_schema');
 
 
 // ==================== STUDENT AUTHENTICATION ====================
@@ -84,14 +85,18 @@ const loginStudent = async (req, res) => {
         
         // Check if lastLogin is more than 24 hours ago
         const now = new Date();
-        const lastLogin = student.lastLogin;
+        const lastLogin = student.lastLogin ? new Date(student.lastLogin) : null;
         const hoursSinceLastLogin = lastLogin ? (now - lastLogin) / (1000 * 60 * 60) : 25;
         
         // Update last login time
         student.lastLogin = now;
-        await student.save();
         
-        // Create token
+        // Save student data and wait for completion
+        console.log("=== SAVING STUDENT DATA ===");
+        await student.save();
+        console.log("=== STUDENT DATA SAVED ===");
+        
+        // Create token after data is saved
         const studentId = student._id.toString();
         const token = jwt.sign(
             { 
@@ -115,6 +120,21 @@ const loginStudent = async (req, res) => {
               classid: student.classid
           }
         });
+        
+        // Generate daily question after sending response only if last login > 24 hours (fire and forget)
+      
+            AI_controller.StudentAiDailyGenerateQuestionAnswer(studentId, student.dailyQuestionSubject)
+                .then(response => {
+                    if (response && response.error) {
+                        console.error("Error generating daily question:", response.error);
+                    } else if (response && response.dailyPracticeQuestion) {
+                        console.log("Daily question generated:", response);
+                    }
+                })
+                .catch(error => {
+                    console.error("Error in daily question generation:", error);
+                });
+   
 
     } catch (error) {
         console.error('Lỗi đăng nhập:', error);
@@ -567,6 +587,40 @@ const AdminAddStudentsAccountsToClass = async (req, res) => {
 };
 
 
+// ==================== DAILY QUESTION FUNCTIONS ====================
+
+const DailyTestSubjectChange = async (req, res) => {
+    try {
+        const studentid = req.user.userId;
+        const { subject } = req.body;
+        const student = await Student.findById(studentid);
+        if (!student) {
+            return res.status(404).json({ message: "Học sinh không tồn tại" });
+        }
+        student.dailyQuestionSubject = subject;
+        await student.save();
+        res.status(200).json({ message: "Thay đổi môn câu hỏi hàng ngày thành công", dailyQuestionSubject: subject });
+    } catch (error) {    
+        console.error('Lỗi thay đổi môn câu hỏi hàng ngày:', error);
+        res.status(500).json({ message: "Lỗi server" });
+    }
+};
+
+const GetDailyQuestionAnswer = async (req, res) => {
+    try {
+        const studentid = req.user.userId;
+        const student = await Student.findById(studentid);
+        if (!student) {
+            return res.status(404).json({ message: "Học sinh không tồn tại" });
+        }
+        res.status(200).json(student.dailyPracticeQuestion);
+    } catch (error) {
+        console.error('Lỗi lấy câu hỏi hàng ngày:', error);
+        res.status(500).json({ message: "Lỗi server" });
+    }
+};
+
+
 // ==================== EXPORTS ====================
 // Export local functions and re-export from other controllers
 
@@ -600,9 +654,11 @@ module.exports = {
     
     // AI functions (from AI_controller)
     Ai_Daily_Generate_Question_Answer: AI_controller.StudentAiDailyGenerateQuestionAnswer,
-    DailyTestSubjectChange: AI_controller.DailyTestSubjectChange,
-    GetDailyQuestionAnswer: AI_controller.GetDailyQuestionAnswer,
     Ai_Auto_Grade_And_Save: AI_controller.Ai_Auto_Grade_And_Save,
+    
+    // Daily Question functions (local)
+    DailyTestSubjectChange,
+    GetDailyQuestionAnswer,
     
     // Schedule function (from schedule_controller)
     getStudentSchedule: scheduleController.getStudentSchedule,

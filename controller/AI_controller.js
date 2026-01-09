@@ -4,7 +4,7 @@ const Answer = require('../schema/test_answer');
 const Test = require('../schema/test_schema');
 const Lesson = require('../schema/class_lesson');
 
-const api_url = 'https://elearn-ai-bot.onrender.com';
+const api_url = 'http://localhost:8000';
 const Ai_Generate_Question_Answer = async (req, res) => {   
     try {
         const {prompt } = req.body;
@@ -277,22 +277,33 @@ const Ai_Daily_Generate_Question_Answer = async (subject, recentTests) => {
         throw error;
     }
 };
-const StudentAiDailyGenerateQuestionAnswer = async (req, res) => {   
+const StudentAiDailyGenerateQuestionAnswer = async (studentid, subject) => {   
     try {
-        const studentid = req.user.userId;
-        const { subject } = req.body;
+
         console.log("Received subject:", subject);
         console.log("Received student ID:", studentid);
         
         // Get recent test data
      
-        const recentTests = await TestAnswer.find({ studentID: studentid, submit: true })
+        const allRecentTests = await Answer.find({ studentID: studentid, submit: true })
             .sort({ createdAt: -1 })
-            .limit(3)
             .populate('testID');
         
-        console.log("Recent Tests Data:", recentTests);
+        // Filter by subject and limit to 3
+        const recentTests = allRecentTests
+            .filter(test => test.testID?.subject === subject)
+            .slice(0, 1);
+
         
+        
+        console.log("All Recent Tests:", recentTests);
+     
+        testinffo = recentTests.map(test => ({
+            subject: test.testID?.subject || '',
+            title: test.testID?.testtitle || '',
+            score: test.teacherGrade || 0,
+            teacherComments: test.teacherComments || '',
+        }));
         const response = await Ai_Daily_Generate_Question_Answer(subject, recentTests);
         if (!response) {
             return res.status(500).json({ error: 'Failed to generate question and answer.' });
@@ -300,48 +311,17 @@ const StudentAiDailyGenerateQuestionAnswer = async (req, res) => {
         console.log("AI Response:", response);
         const student = await Student.findById(studentid);
         // Lưu câu hỏi hàng ngày vào hồ sơ học sinh
-        student.dailyPracticeQuestion.push({
+        student.dailyPracticeQuestion ={
             question: response.question,
             answer: response.answer,
             ai_score: response.ai_score,
             improvement_suggestions: response.improvement_suggestions
-        });
+        };
         await student.save();
-        res.status(200).json(response);
+        return response;
     } catch (error) {
         console.error('Error generating question and answer:', error);
-        res.status(500).json({ error: 'Failed to generate question and answer.' });        
-    }
-};
-
-const DailyTestSubjectChange = async (req, res) => {
-    try {
-        const studentid = req.user.userId;
-        const { subject } = req.body;
-        const student = await Student.findById(studentid);
-        if (!student) {
-            return res.status(404).json({ message: "Học sinh không tồn tại" });
-        }
-        student.dailyQuestionSubject = subject;
-        await student.save();
-        res.status(200).json({ message: "Thay đổi môn câu hỏi hàng ngày thành công", dailyQuestionSubject: subject });
-    } catch (error) {    
-        console.error('Lỗi thay đổi môn câu hỏi hàng ngày:', error);
-        res.status(500).json({ message: "Lỗi server" });
-    }
-};
-
-const GetDailyQuestionAnswer = async (req, res) => {
-    try {
-        const studentid = req.user.userId;
-        const student = await Student.findById(studentid);
-        if (!student) {
-            return res.status(404).json({ message: "Học sinh không tồn tại" });
-        }
-        res.status(200).json(student.dailyPracticeQuestion);
-    } catch (error) {
-        res.status(500).json({ message: "Lỗi server" });
-        console.error('Lỗi lấy câu hỏi hàng ngày:', error);
+           
     }
 };
 
@@ -526,8 +506,6 @@ module.exports = {
     Ai_Daily_Generate_Question_Answer,
     // Student AI functions
     StudentAiDailyGenerateQuestionAnswer,
-    DailyTestSubjectChange,
-    GetDailyQuestionAnswer,
     Ai_Auto_Grade_And_Save,
     Ai_recent_test_grading_and_feedback,
     // Teacher AI functions

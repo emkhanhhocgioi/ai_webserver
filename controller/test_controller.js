@@ -206,7 +206,7 @@ const StudentGetClassTest = async (req, res) => {
         }
 
         // Use .lean() to get plain objects we can mutate safely and fetch tests in parallel
-        const tests = await TestScheme.find({ classID: classStudent.classID, status: 'open' }).lean();
+        const tests = await TestScheme.find({ classID: classStudent.classID }).lean();
 
         const enrichedTests = await Promise.all(tests.map(async (test) => {
             const existingAnswer = await TestAnswer.findOne({ 

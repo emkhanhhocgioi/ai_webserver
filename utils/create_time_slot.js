@@ -15,7 +15,7 @@ const allSlots = [];
 
 // ===== Generate TimeSlots =====
 for (const day of DAYS) {
-  // Buổi sáng – 5 tiết
+  // Buổi sáng – 5 tiết (period 1-5)
   let currentTime = "07:00";
   for (let period = 1; period <= 5; period++) {
     const endTime = addMinutes(currentTime, LESSON_DURATION);
@@ -31,9 +31,9 @@ for (const day of DAYS) {
     currentTime = addMinutes(endTime, BREAK_DURATION);
   }
 
-  // Buổi chiều – 4 tiết
+  // Buổi chiều – 5 tiết (period 6-10)
   currentTime = "13:30";
-  for (let period = 1; period <= 4; period++) {
+  for (let period = 6; period <= 10; period++) {
     const endTime = addMinutes(currentTime, LESSON_DURATION);
 
     allSlots.push({
@@ -52,8 +52,15 @@ for (const day of DAYS) {
 // Insert into DB inside an async function (avoid top-level await in CommonJS)
 async function main() {
   try {
+    // Xóa tất cả time slots cũ
+    const deleteResult = await TimeSlot.deleteMany({});
+    console.log(`🗑️  Đã xóa ${deleteResult.deletedCount} time slots cũ`);
+    
+    // Tạo time slots mới
     await TimeSlot.insertMany(allSlots);
-    console.log(`✅ Đã tạo ${allSlots.length} TimeSlot THCS`);
+    console.log(`✅ Đã tạo ${allSlots.length} time slots mới (10 tiết/ngày cho ${DAYS.length} ngày)`);
+    console.log(`   - Buổi sáng: Tiết 1-5 (07:00 bắt đầu)`);
+    console.log(`   - Buổi chiều: Tiết 6-10 (13:30 bắt đầu)`);
   } catch (err) {
     console.error('Error inserting TimeSlots:', err);
     process.exitCode = 1;

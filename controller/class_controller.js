@@ -249,10 +249,12 @@ const AdminGetClassByID = async (req, res) => {
             });
         }
         const classSubjectTeacher = await getClassSubjectTeacher(classId);
-        const mergedClassData = { ...classData.toObject(), subjectTeacher: classSubjectTeacher.data };
+        const classStudentCount = await ClassStudent.countDocuments({ classID: classId });
+        const mergedClassData = { ...classData.toObject(), subjectTeacher: classSubjectTeacher.data,studentCount: classStudentCount };
         res.status(200).json({
             success: true,
-            class: mergedClassData   
+            class: mergedClassData,
+            
         });
     } catch (error) {   
         console.error('Lỗi khi lấy dữ liệu lớp học theo ID:', error);  

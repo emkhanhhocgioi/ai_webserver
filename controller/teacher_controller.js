@@ -995,9 +995,78 @@ const GetTeacherById = async (req,res) => {
     }
 }
 
+const getSubjectClassTeachers = async (req, res) => {
+  try {
+    const { classId } = req.params;
+    
+    if (!classId) {
+      return res.status(400).json({
+        success: false,
+        message: 'classId là bắt buộc'
+      });
+    }
 
+    // Tìm SubjectClass và populate tất cả các giáo viên
+    const subjectClass = await SubjectClass.findOne({ classid: classId })
+      .populate('toan', 'name email phoneNumber subject yearsOfExperience')
+      .populate('ngu_van', 'name email phoneNumber subject yearsOfExperience')
+      .populate('tieng_anh', 'name email phoneNumber subject yearsOfExperience')
+      .populate('vat_ly', 'name email phoneNumber subject yearsOfExperience')
+      .populate('hoa_hoc', 'name email phoneNumber subject yearsOfExperience')
+      .populate('sinh_hoc', 'name email phoneNumber subject yearsOfExperience')
+      .populate('lich_su', 'name email phoneNumber subject yearsOfExperience')
+      .populate('dia_ly', 'name email phoneNumber subject yearsOfExperience')
+      .populate('giao_duc_cong_dan', 'name email phoneNumber subject yearsOfExperience')
+      .populate('cong_nghe', 'name email phoneNumber subject yearsOfExperience')
+      .populate('tin_hoc', 'name email phoneNumber subject yearsOfExperience')
+      .populate('the_duc', 'name email phoneNumber subject yearsOfExperience')
+      .populate('am_nhac', 'name email phoneNumber subject yearsOfExperience')
+      .populate('my_thuat', 'name email phoneNumber subject yearsOfExperience')
+      .populate('classid', 'class_code class_year');
+    
+    if (!subjectClass) {
+      return res.status(404).json({
+        success: false,
+        message: 'Không tìm thấy dữ liệu giáo viên môn học cho lớp này'
+      });
+    }
 
+    // Format response data
+    const subjectTeachers = {
+      classInfo: subjectClass.classid,
+      subjects: {
+        toan: subjectClass.toan,
+        ngu_van: subjectClass.ngu_van,
+        tieng_anh: subjectClass.tieng_anh,
+        vat_ly: subjectClass.vat_ly,
+        hoa_hoc: subjectClass.hoa_hoc,
+        sinh_hoc: subjectClass.sinh_hoc,
+        lich_su: subjectClass.lich_su,
+        dia_ly: subjectClass.dia_ly,
+        giao_duc_cong_dan: subjectClass.giao_duc_cong_dan,
+        cong_nghe: subjectClass.cong_nghe,
+        tin_hoc: subjectClass.tin_hoc,
+        the_duc: subjectClass.the_duc,
+        am_nhac: subjectClass.am_nhac,
+        my_thuat: subjectClass.my_thuat
+      }
+    };
 
+    res.status(200).json({
+      success: true,
+      message: 'Lấy dữ liệu giáo viên môn học thành công',
+      data: subjectTeachers
+    });
+
+  } catch (error) {
+    console.error('Lỗi khi lấy giáo viên môn học:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Lỗi server khi lấy dữ liệu giáo viên môn học',
+      error: error.message
+    });
+  }
+};
 // ==================== TEST NOTIFICATION ====================
 
 const testBroadcastNotification = async (req, res) => {
@@ -1095,6 +1164,8 @@ module.exports = {
   AdminGetTeacherById,
   AdminDeleteTeacherByID,
   AdminUpdateTeacherByID,
+  // Subject Teacher functions
+  getSubjectClassTeachers,
   // Test functions
   testBroadcastNotification
 };

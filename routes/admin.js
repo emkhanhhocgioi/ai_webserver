@@ -6,7 +6,7 @@ const Admin = require('../schema/admin_schema');
 const TimeSlot = require('../schema/time_slot_schema.js');
 const {adminVerify} = require('../midlewares/adminverify');
 const controller = require('../controller/admin_controller');
-
+const teacherController = require('../controller/teacher_controller');  
 
 // Student Management Routes
 router.get('/students',adminVerify, controller.AdminGetStudentData);
@@ -17,7 +17,7 @@ router.get('/students/class/:classId',adminVerify, controller.GetStudentByClassI
 
 // Subject Teacher Management Routes
 router.put('/class/subject-teacher/:classid',adminVerify, controller.addSubjectTeacherForClass);
-
+router.get('/class/:classId/subject-teachers', adminVerify, teacherController.getSubjectClassTeachers);
 
 // Class Management Routes
 router.get('/classes',adminVerify, controller.AdminGetClassData);

@@ -31,7 +31,7 @@ const testSchema = new Schema({
     },
     createDate: { type: Date, required: true, default: Date.now },
     closeDate: { type: Date, required: true },
-    status :{type: String, default: 'open' }
+    status :{type: String, default: 'closed' }
 });
 
 const Test = mongoose.model('Test', testSchema);
