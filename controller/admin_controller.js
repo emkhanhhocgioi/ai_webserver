@@ -112,5 +112,6 @@ module.exports = {
     // Schedule Management (from schedule_controller)
     assignTeacherToTimeSlot: scheduleController.assignTeacherToTimeSlot,
     getClassSchedule: scheduleController.getClassSchedule,
-    getTimeSlot: scheduleController.getTimeSlot
+    getTimeSlot: scheduleController.getTimeSlot,
+    deleteSchedule: scheduleController.deleteTeacherFromTimeSlot
 };

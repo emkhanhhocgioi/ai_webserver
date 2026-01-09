@@ -105,6 +105,39 @@ const assignTeacherToTimeSlot = async (req, res) => {
         });
     }
 };
+const deleteTeacherFromTimeSlot = async (req, res) => {
+    try {
+        const { scheduleId } = req.params;
+        // Validate scheduleId
+        if (!scheduleId) {
+            return res.status(400).json({
+                success: false,
+                message: "Vui lòng cung cấp scheduleId"
+            });
+        }
+        // Check if schedule exists
+        const schedule = await TeachingSchedule.findById(scheduleId);
+        if (!schedule) {    
+            return res.status(404).json({
+                success: false,
+                message: "Không tìm thấy lịch dạy"
+            });
+        }   
+        // Delete the schedule
+        await TeachingSchedule.findByIdAndDelete(scheduleId);
+        res.status(200).json({  
+            success: true,
+            message: "Xóa lịch dạy thành công"
+        });
+    } catch (error) {
+        console.error('Lỗi khi xóa lịch dạy:', error);
+        res.status(500).json({
+            success: false,
+            message: "Lỗi server",
+            error: error.message
+        });
+    }
+};
 
 const getClassSchedule = async (req, res) => {
     try {
@@ -399,6 +432,7 @@ module.exports = {
     // Student Schedule function
     getStudentSchedule,
     // Teacher Schedule function
-    getTeacherSchedule
+    getTeacherSchedule,
+    deleteTeacherFromTimeSlot,
 };
 

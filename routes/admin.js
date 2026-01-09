@@ -49,6 +49,8 @@ router.get('/test-reports/statistics', adminVerify, controller.getOverallTestSta
 // Class Schedule Management Routes
 router.post('/schedule/assign', adminVerify, controller.assignTeacherToTimeSlot);
 router.get('/schedule/class/:classId', adminVerify, controller.getClassSchedule);
+router.delete('/schedule/delete/:scheduleId', adminVerify, controller.deleteSchedule);
+
 
 
 // Postman test route (no auth)
