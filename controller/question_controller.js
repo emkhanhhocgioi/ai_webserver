@@ -218,12 +218,12 @@ const TeacherCreateQuestion = async (req, res) => {
     // Xử lý upload file nếu có
     if (req.file) {
       try {
-        const imageUrl = await uploadToCloudinary(
+        const uploadResult = await uploadToCloudinary(
           req.file.buffer, 
           req.file.originalname,
           'questionImages'
         );
-        metadata = imageUrl;
+        metadata = uploadResult.secure_url;
       } catch (uploadError) {
         console.error('Lỗi upload ảnh:', uploadError);
         return res.status(500).json({ message: 'Lỗi khi upload ảnh câu hỏi' });
@@ -431,12 +431,12 @@ const TeacherUpdateQuestion = async (req, res) => {
       
       // Upload ảnh mới
       try {
-        const imageUrl = await uploadToCloudinary(
+        const uploadResult = await uploadToCloudinary(
           req.file.buffer, 
           req.file.originalname,
           'questionImages'
         );
-        updateData.metadata = imageUrl;
+        updateData.metadata = uploadResult.secure_url;
       } catch (uploadError) {
         console.error('Lỗi upload ảnh:', uploadError);
         return res.status(500).json({ message: 'Lỗi khi upload ảnh câu hỏi' });
